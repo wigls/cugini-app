@@ -3,6 +3,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../../lib/supabase';
 
+// 🚫 evita que Vercel congele/pre-renderice esta página
+export const dynamic = 'force-dynamic';
+export const revalidate = 0 as const;
+export const fetchCache = 'force-no-store';
+
 type Reward = {
   id: number;
   name: string;
@@ -20,84 +25,82 @@ export default function RedeemPage() {
   const [redeeming, setRedeeming] = useState(false);
   const [isLogged, setIsLogged] = useState(false);
 
-  // cantidades por id de premio
   const [qtyById, setQtyById] = useState<Record<number, number>>({});
 
   useEffect(() => {
-    let alive = true;
-
-    async function fetchRewards(): Promise<Reward[]> {
-      // 1) Intento con la vista sin tildes
-      const r1 = await supabase
-        .from('rewards_pub')
-        .select('id,name,description,points_cost,image_url,is_active')
-        .order('points_cost', { ascending: true });
-
-      if (r1.error) {
-        // Si la vista no existe en prod, caemos a la tabla real
-        console.warn('[redeem] rewards_pub falló, probando "revisión":', r1.error.message);
-      } else if (r1.data && r1.data.length > 0) {
-        return (r1.data as Reward[]).filter((r) => r.is_active !== false);
-      }
-
-      // 2) Fallback a la tabla con tilde
-      const r2 = await supabase
-        .from('revisión')
-        .select('id,name,description,points_cost,image_url,is_active')
-        .order('points_cost', { ascending: true });
-
-      if (r2.error) {
-        console.error('❌ Error al traer premios (revisión):', r2.error.message);
-        return [];
-      }
-      return (r2.data as Reward[]).filter((r) => r.is_active !== false);
-    }
-
     async function load() {
+      setMessage(null);
       try {
-        // usuario (puede ser null en el primer render de Vercel)
+        // 1) Sesión (no bloquea si no hay)
         const { data: userRes, error: userErr } = await supabase.auth.getUser();
         const user = userRes?.user ?? null;
         setIsLogged(!!user);
         if (userErr) console.warn('[redeem] auth.getUser:', userErr.message);
 
-        // premios SIEMPRE
-        const rewardsList = await fetchRewards();
-        if (!alive) return;
-        setRewards(rewardsList);
+        // 2) Premios: intenta rewards_pub -> si falla, cae a "revisión"
+        let got: Reward[] = [];
+        let readErr: string | null = null;
 
-        // saldo SOLO si hay sesión
+        // intento 1: vista pública (si es que existe en tu prod)
+        {
+          const { data, error } = await supabase
+            .from('rewards_pub')
+            .select('id,name,description,points_cost,image_url,is_active')
+            .order('points_cost', { ascending: true });
+
+          if (!error && Array.isArray(data)) {
+            got = (data as any[]).filter((r) => r.is_active !== false) as Reward[];
+            console.log('[redeem] usando rewards_pub:', got.length);
+          } else {
+            readErr = error?.message ?? 'rewards_pub no existe o no es accesible';
+            console.warn('[redeem] rewards_pub falló:', readErr);
+          }
+        }
+
+        // intento 2: tu tabla con tilde (solo si el intento 1 no dio datos)
+        if (got.length === 0) {
+          const { data, error } = await supabase
+            .from('revisión') // 👈 tu tabla real
+            .select('id,name,description,points_cost,image_url,is_active')
+            .order('points_cost', { ascending: true });
+
+          if (!error && Array.isArray(data)) {
+            got = (data as any[]).filter((r) => r.is_active !== false) as Reward[];
+            console.log('[redeem] usando "revisión":', got.length);
+          } else {
+            const msg = error?.message ?? 'no se pudo leer "revisión"';
+            console.error('[redeem] revisión falló:', msg);
+            if (readErr) readErr += ' | ' + msg;
+            else readErr = msg;
+          }
+        }
+
+        setRewards(got);
+        if (got.length === 0 && readErr) {
+          setMessage('⚠️ No pudimos cargar los premios: ' + readErr);
+        }
+
+        // 3) Saldo (solo si hay sesión)
         if (user) {
-          const { data: balRes, error: balErr } = await supabase
+          const { data: bal, error: balErr } = await supabase
             .from('user_points')
             .select('balance')
             .eq('user_id', user.id)
             .maybeSingle();
 
-          if (!alive) return;
-          if (balErr) {
-            console.warn('[redeem] user_points:', balErr.message);
-            setBalance(0);
-          } else {
-            setBalance(balRes?.balance ?? 0);
-          }
+          if (balErr) console.warn('[redeem] user_points:', balErr.message);
+          setBalance(bal?.balance ?? 0);
         } else {
           setBalance(0);
         }
-      } catch (e) {
-        console.warn('[redeem] error inesperado:', e);
-        if (!alive) return;
-        setRewards([]);
-        setBalance(0);
+      } catch (e: any) {
+        console.error('[redeem] error inesperado:', e);
+        setMessage('❌ Error inesperado al cargar: ' + (e?.message ?? String(e)));
       } finally {
-        if (alive) setLoading(false);
+        setLoading(false);
       }
     }
-
     load();
-    return () => {
-      alive = false;
-    };
   }, []);
 
   const totalUnits = useMemo(
@@ -143,16 +146,12 @@ export default function RedeemPage() {
 
   async function handleRedeemSelected() {
     setMessage(null);
-
-    // Bloquea canje si NO hay sesión
     if (!isLogged) {
       setMessage('🔒 Inicia sesión para canjear tus puntos.');
       window.location.href = '/auth';
       return;
     }
-
     if (redeeming) return;
-
     if (totalUnits === 0) {
       setMessage('⚠️ No has seleccionado premios.');
       return;
@@ -196,23 +195,18 @@ export default function RedeemPage() {
 
       const code = 'CUG-' + Math.floor(100000 + Math.random() * 900000).toString();
       setQtyById({});
-      window.location.href = `/app/redeem/success?code=${encodeURIComponent(
-        code
-      )}&reward=${encodeURIComponent(summary)}`;
+      window.location.href =
+        `/app/redeem/success?code=${encodeURIComponent(code)}&reward=${encodeURIComponent(summary)}`;
     } finally {
       setRedeeming(false);
     }
   }
 
-  // normaliza imágenes
   const normalizeImg = (src?: string | null) =>
-    !src
-      ? '/brand/placeholder.png'
-      : src.startsWith('http')
-      ? src
-      : src.startsWith('/')
-      ? src
-      : `/brand/${src}`;
+    !src ? '/brand/placeholder.png'
+    : src.startsWith('http') ? src
+    : src.startsWith('/') ? src
+    : `/brand/${src}`;
 
   if (loading) {
     return (
@@ -233,9 +227,7 @@ export default function RedeemPage() {
         <div className="rounded-xl border border-cugini-dark/10 bg-white/90 backdrop-blur p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div>
             <h1 className="text-xl font-extrabold text-cugini-green">Canjea tus puntos</h1>
-            <p className="text-sm text-cugini-dark/70">
-              Elige tus favoritos y confirma el canje.
-            </p>
+            <p className="text-sm text-cugini-dark/70">Elige tus favoritos y confirma el canje.</p>
           </div>
           <div className="text-sm">
             <span className="text-cugini-dark/60">Tus puntos: </span>
@@ -252,19 +244,12 @@ export default function RedeemPage() {
             </span>{' '}
             pts
             {isLogged && overLimit && (
-              <span className="ml-2 text-red-600">
-                (te faltan {totalSelected - balance} pts)
-              </span>
+              <span className="ml-2 text-red-600">(te faltan {totalSelected - balance} pts)</span>
             )}
           </p>
           <div className="flex gap-2">
             <button
-              onClick={() => {
-                if (!redeeming) {
-                  setQtyById({});
-                  setMessage(null);
-                }
-              }}
+              onClick={() => { if (!redeeming) { setQtyById({}); setMessage(null); } }}
               className="px-3 py-1 rounded text-sm bg-slate-100 hover:bg-slate-200"
               disabled={redeeming}
             >
@@ -306,12 +291,7 @@ export default function RedeemPage() {
                     className="group rounded-2xl border border-cugini-dark/10 bg-white shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col"
                   >
                     <div className="relative">
-                      <img
-                        src={imageSrc}
-                        alt={r.name}
-                        className="w-full h-40 object-cover"
-                        loading="lazy"
-                      />
+                      <img src={imageSrc} alt={r.name} className="w-full h-40 object-cover" loading="lazy" />
                       <div className="absolute top-2 right-2 bg-cugini-green text-white text-xs px-2 py-1 rounded-full shadow">
                         {r.points_cost} pts
                       </div>
@@ -319,18 +299,14 @@ export default function RedeemPage() {
 
                     <div className="p-4 flex-1 flex flex-col">
                       <h3 className="font-semibold text-cugini-dark">{r.name}</h3>
-                      <p className="text-xs text-cugini-dark/60 line-clamp-2 mt-1">
-                        {r.description ?? '—'}
-                      </p>
+                      <p className="text-xs text-cugini-dark/60 line-clamp-2 mt-1">{r.description ?? '—'}</p>
 
                       <div className="mt-auto pt-3 flex items-center justify-between">
                         {qty > 0 ? (
                           <span className="text-sm text-cugini-dark/70">
                             = <span className="font-semibold">{lineTotal}</span> pts
                           </span>
-                        ) : (
-                          <span />
-                        )}
+                        ) : <span />}
 
                         <div className="flex items-center gap-2">
                           <button
@@ -357,23 +333,15 @@ export default function RedeemPage() {
                 );
               })}
 
-              {/* Tile decorativo */}
               <div
                 aria-hidden="true"
                 className="rounded-2xl border border-cugini-dark/10 bg-white shadow-sm overflow-hidden flex flex-col items-center justify-center pointer-events-none select-none"
               >
                 <div className="relative flex items-center justify-center w-full h-44">
-                  <img
-                    src="/brand/walker.png"
-                    alt=""
-                    className="h-40 w-auto object-contain opacity-40 scale-110 transform"
-                    loading="lazy"
-                  />
+                  <img src="/brand/walker.png" alt="" className="h-40 w-auto object-contain opacity-40 scale-110 transform" loading="lazy" />
                 </div>
                 <div className="pb-4">
-                  <p className="text-center text-base font-bold text-cugini-green">
-                    Cugini Pizza
-                  </p>
+                  <p className="text-center text-base font-bold text-cugini-green">Cugini Pizza</p>
                 </div>
               </div>
             </>
