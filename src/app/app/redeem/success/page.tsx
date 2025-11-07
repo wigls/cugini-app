@@ -1,55 +1,58 @@
 'use client';
 
-import { useSearchParams } from 'next/navigation'
-import { useEffect, useMemo, useState } from 'react'
-import { supabase } from '../../../../lib/supabase'
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { supabase } from '../../../../lib/supabase';
 
-export default function RedeemSuccessPage() {
-  const sp = useSearchParams()
-  const code = sp.get('code') ?? '—'
-  const reward = sp.get('reward') ?? ''
+// Evita que Next intente prerender esta página en build.
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
-  const [loading, setLoading] = useState(true)
-  const [email, setEmail] = useState<string>('')
-  const [fullName, setFullName] = useState<string>('')
-  const [phone, setPhone] = useState<string>('')
+function SuccessInner() {
+  const sp = useSearchParams();
+  const code = sp.get('code') ?? '—';
+  const reward = sp.get('reward') ?? '';
 
-  const [copied, setCopied] = useState(false)
+  const [loading, setLoading] = useState(true);
+  const [email, setEmail] = useState<string>('');
+  const [fullName, setFullName] = useState<string>('');
+  const [phone, setPhone] = useState<string>('');
+  const [copied, setCopied] = useState(false);
 
   // 📲 Número oficial de Cugini (sin +, sin espacios)
-  const phoneCugini = '56932383553'
+  const phoneCugini = '56932383553';
 
   useEffect(() => {
     async function load() {
       // 1) Usuario
-      const { data: userRes } = await supabase.auth.getUser()
-      const user = userRes.user
+      const { data: userRes } = await supabase.auth.getUser();
+      const user = userRes.user;
       if (!user) {
         // Si no hay sesión, enviamos a /auth
-        window.location.href = '/auth'
-        return
+        window.location.href = '/auth';
+        return;
       }
-      setEmail(user.email ?? '')
+      setEmail(user.email ?? '');
 
       // 2) Perfil en DB
       const { data: prof } = await supabase
         .from('profiles')
         .select('full_name, phone')
         .eq('user_id', user.id)
-        .maybeSingle()
+        .maybeSingle();
 
       // 3) Fallback a metadata (por si el perfil aún no existe)
-      const meta = (user.user_metadata ?? {}) as Record<string, any>
+      const meta = (user.user_metadata ?? {}) as Record<string, any>;
 
-      setFullName((prof?.full_name ?? meta.full_name ?? '').toString())
-      setPhone((prof?.phone ?? meta.phone ?? '').toString())
+      setFullName((prof?.full_name ?? meta.full_name ?? '').toString());
+      setPhone((prof?.phone ?? meta.phone ?? '').toString());
 
-      setLoading(false)
+      setLoading(false);
     }
-    load()
-  }, [])
+    load();
+  }, []);
 
-  const profileComplete = fullName.trim().length > 0 && phone.trim().length > 0
+  const profileComplete = fullName.trim().length > 0 && phone.trim().length > 0;
 
   const waLink = useMemo(() => {
     const text = encodeURIComponent(
@@ -63,9 +66,9 @@ export default function RedeemSuccessPage() {
       ]
         .filter(Boolean)
         .join('\n')
-    )
-    return `https://wa.me/${phoneCugini}?text=${text}`
-  }, [code, reward, fullName, phone, email])
+    );
+    return `https://wa.me/${phoneCugini}?text=${text}`;
+  }, [code, reward, fullName, phone, email]);
 
   async function copyCode() {
     try {
@@ -79,9 +82,9 @@ export default function RedeemSuccessPage() {
         ]
           .filter(Boolean)
           .join(' | ')
-      )
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
+      );
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
     } catch {
       // noop
     }
@@ -92,7 +95,7 @@ export default function RedeemSuccessPage() {
       <div className="min-h-screen flex items-center justify-center bg-slate-100 p-6">
         <div className="bg-white rounded-xl shadow p-4">Cargando…</div>
       </div>
-    )
+    );
   }
 
   // 🔒 Si el perfil NO está completo, bloqueamos y pedimos completarlo
@@ -126,7 +129,7 @@ export default function RedeemSuccessPage() {
           </a>
         </div>
       </div>
-    )
+    );
   }
 
   // ✅ Perfil completo: flujo normal con WhatsApp
@@ -149,10 +152,7 @@ export default function RedeemSuccessPage() {
           <p className="text-sm text-slate-500">Código de canje</p>
           <div className="flex items-center justify-between gap-3">
             <code className="text-lg font-bold text-slate-800">{code}</code>
-            <button
-              onClick={copyCode}
-              className="text-sm px-3 py-1 rounded bg-slate-200 hover:bg-slate-300"
-            >
+            <button onClick={copyCode} className="text-sm px-3 py-1 rounded bg-slate-200 hover:bg-slate-300">
               {copied ? 'Copiado ✔' : 'Copiar'}
             </button>
           </div>
@@ -190,20 +190,23 @@ export default function RedeemSuccessPage() {
         </p>
 
         <div className="flex flex-wrap gap-2">
-          <a
-            href="/app"
-            className="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700"
-          >
+          <a href="/app" className="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700">
             Ir a Mis puntos
           </a>
-          <a
-            href="/app/redeem"
-            className="px-4 py-2 rounded bg-slate-100 hover:bg-slate-200"
-          >
+          <a href="/app/redeem" className="px-4 py-2 rounded bg-slate-100 hover:bg-slate-200">
             Canjear más
           </a>
         </div>
       </div>
     </div>
-  )
+  );
+}
+
+export default function RedeemSuccessPage() {
+  // Envoltura requerida para useSearchParams en cliente
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-slate-100 p-6"><div className="bg-white rounded-xl shadow p-4">Cargando…</div></div>}>
+      <SuccessInner />
+    </Suspense>
+  );
 }
