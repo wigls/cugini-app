@@ -18,58 +18,86 @@ export default function RedeemPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [redeeming, setRedeeming] = useState(false);
-  const [isLogged, setIsLogged] = useState(false); // 👈 nuevo: sabemos si hay sesión
+  const [isLogged, setIsLogged] = useState(false);
 
   // cantidades por id de premio
   const [qtyById, setQtyById] = useState<Record<number, number>>({});
 
   useEffect(() => {
+    let alive = true;
+
+    async function fetchRewards(): Promise<Reward[]> {
+      // 1) Intento con la vista sin tildes
+      const r1 = await supabase
+        .from('rewards_pub')
+        .select('id,name,description,points_cost,image_url,is_active')
+        .order('points_cost', { ascending: true });
+
+      if (r1.error) {
+        // Si la vista no existe en prod, caemos a la tabla real
+        console.warn('[redeem] rewards_pub falló, probando "revisión":', r1.error.message);
+      } else if (r1.data && r1.data.length > 0) {
+        return (r1.data as Reward[]).filter((r) => r.is_active !== false);
+      }
+
+      // 2) Fallback a la tabla con tilde
+      const r2 = await supabase
+        .from('revisión')
+        .select('id,name,description,points_cost,image_url,is_active')
+        .order('points_cost', { ascending: true });
+
+      if (r2.error) {
+        console.error('❌ Error al traer premios (revisión):', r2.error.message);
+        return [];
+      }
+      return (r2.data as Reward[]).filter((r) => r.is_active !== false);
+    }
+
     async function load() {
       try {
-        // 1) Intentar obtener usuario (pero NO salimos si es null)
+        // usuario (puede ser null en el primer render de Vercel)
         const { data: userRes, error: userErr } = await supabase.auth.getUser();
         const user = userRes?.user ?? null;
         setIsLogged(!!user);
-        if (userErr) {
-          // no bloquea la carga de premios
-          console.warn('auth.getUser error:', userErr.message);
-        }
+        if (userErr) console.warn('[redeem] auth.getUser:', userErr.message);
 
-        // 2) Cargar premios SIEMPRE (con o sin sesión)
-        //    Usa rewards_pub (vista sin tilde) o la tabla que prefieras
-        const { data: rewardsRes, error: rewardsErr } = await supabase
-          .from('rewards_pub') // ← si no creaste la vista, usa 'revisión'
-          .select('id,name,description,points_cost,image_url,is_active')
-          .order('points_cost', { ascending: true });
+        // premios SIEMPRE
+        const rewardsList = await fetchRewards();
+        if (!alive) return;
+        setRewards(rewardsList);
 
-        if (rewardsErr) {
-          console.error('❌ Error al traer premios:', rewardsErr);
-          setRewards([]);
-        } else {
-          const activeOnly = (rewardsRes || []).filter((r) => r.is_active !== false);
-          setRewards(activeOnly as Reward[]);
-        }
-
-        // 3) Cargar saldo solo si hay sesión
+        // saldo SOLO si hay sesión
         if (user) {
-          const { data: balanceRes, error: balErr } = await supabase
+          const { data: balRes, error: balErr } = await supabase
             .from('user_points')
             .select('balance')
             .eq('user_id', user.id)
             .maybeSingle();
 
+          if (!alive) return;
           if (balErr) {
-            console.warn('user_points error:', balErr.message);
+            console.warn('[redeem] user_points:', balErr.message);
+            setBalance(0);
+          } else {
+            setBalance(balRes?.balance ?? 0);
           }
-          setBalance(balanceRes?.balance ?? 0);
         } else {
           setBalance(0);
         }
+      } catch (e) {
+        console.warn('[redeem] error inesperado:', e);
+        if (!alive) return;
+        setRewards([]);
+        setBalance(0);
       } finally {
-        setLoading(false);
+        if (alive) setLoading(false);
       }
     }
+
     load();
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const totalUnits = useMemo(
@@ -116,7 +144,7 @@ export default function RedeemPage() {
   async function handleRedeemSelected() {
     setMessage(null);
 
-    // 👇 Bloquea canje si NO hay sesión
+    // Bloquea canje si NO hay sesión
     if (!isLogged) {
       setMessage('🔒 Inicia sesión para canjear tus puntos.');
       window.location.href = '/auth';
@@ -355,4 +383,3 @@ export default function RedeemPage() {
     </div>
   );
 }
- 
