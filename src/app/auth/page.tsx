@@ -1,241 +1,462 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { supabase } from '../../lib/supabase'
-function DebugAuthPing({ email, password }: { email: string; password: string }) {
-  async function ping() {
-    try {
-      const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-      const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-      const res = await fetch(`${url}/auth/v1/token?grant_type=password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: key,
-          Authorization: `Bearer ${key}`,
-        },
-        body: JSON.stringify({ email, password }),
-      });
-      const txt = await res.text();
-      console.log('PING STATUS', res.status);
-      console.log('PING BODY', txt);
-      alert(`PING status: ${res.status}`);
-    } catch (e: any) {
-      console.error('PING FAILED', e);
-      alert(`PING failed: ${e?.message || e}`);
-    }
-  }
-  return (
-    <button
-      type="button"
-      onClick={ping}
-      className="w-full bg-amber-100 text-amber-900 py-2 rounded text-sm mt-2"
-      title="Llama al endpoint /auth/v1/token directamente"
-    >
-      🔧 Probar conexión Auth (debug)
-    </button>
-  );
-}
 
 export default function AuthPage() {
-  // Forms
-  const [fullName, setFullName] = useState('')
-  const [phone, setPhone] = useState('')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [password2, setPassword2] = useState('')
+  const searchParams = useSearchParams()
+
+  // ---------- ESTADOS REGISTRO ----------
+  const [regEmail, setRegEmail] = useState('')
+  const [regPassword, setRegPassword] = useState('')
+  const [regConfirmPassword, setRegConfirmPassword] = useState('')
+  const [regFullName, setRegFullName] = useState('')
+  const [regPhone, setRegPhone] = useState('')
+
+  // ---------- ESTADOS LOGIN ----------
   const [loginEmail, setLoginEmail] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
+
+  // ---------- RESET ----------
   const [resetEmail, setResetEmail] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [newPassword2, setNewPassword2] = useState('')
+  const [isResetFlow, setIsResetFlow] = useState(false)
+  const [showResetRequest, setShowResetRequest] = useState(false)
 
-  // UI
-  const [msg, setMsg] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [mode, setMode] = useState<'login' | 'signup' | 'reset' | 'newpass'>('signup')
+  // ---------- GENERALES ----------
+  const [message, setMessage] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
 
-  // Detección de flujo de recuperación al entrar desde el correo
-  useEffect(() => {
-    const hash = typeof window !== 'undefined' ? window.location.hash : ''
-    const byHash = hash.includes('type=recovery') || hash.includes('access_token=')
-    const byQuery = typeof window !== 'undefined'
-      ? new URLSearchParams(window.location.search).get('type') === 'recovery'
-      : false
+  // Modo post-registro: “revisa tu correo”
+  const [checkEmailMode, setCheckEmailMode] = useState(false)
+  const [pendingEmail, setPendingEmail] = useState('')
 
-    if (byHash || byQuery) {
-      setMode('newpass')
-      setMsg('Escribe tu nueva contraseña.')
-    }
-  }, [])
-
-  const origin = useMemo(
-    () => (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'),
-    []
-  )
+  // URL base para los redirects
+  const origin =
+    typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
   const authRedirect = `${origin}/auth`
 
-  // ---------- SIGN UP ----------
-  async function onSignup(e: React.FormEvent) {
-    e.preventDefault()
-    setMsg(null)
+  // 1) Detectar si viene desde enlace de correo
+  useEffect(() => {
+    // query param (algunos providers pueden usar ?type=recovery)
+    const fromQueryRecovery = searchParams.get('type') === 'recovery'
 
-    if (!fullName.trim()) return setMsg('⚠️ Ingresa tu nombre completo.')
-    const phoneRegex = /^\+56\s?9\d{8}$/ // +56 9XXXXXXXX
-    if (!phoneRegex.test(phone.trim())) return setMsg('⚠️ Formato de teléfono: +56 9XXXXXXXX')
-
-    if (password !== password2) return setMsg('⚠️ Las contraseñas no coinciden.')
-    if (password.length < 8) return setMsg('⚠️ Mínimo 8 caracteres.')
-
-    setLoading(true)
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: authRedirect,
-        data: { full_name: fullName.trim(), phone: phone.trim() },
-      },
-    })
-    setLoading(false)
-
-    if (error) {
-      const m = error.message.toLowerCase()
-      if (m.includes('already registered')) return setMsg('⚠️ Ya existe una cuenta con ese correo.')
-      return setMsg('❌ Error al crear la cuenta: ' + error.message)
+    // fragment/hash que usa Supabase: #access_token=...&type=signup|recovery|magiclink...
+    let typeFromHash: string | null = null
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const hashParams = new URLSearchParams(window.location.hash.slice(1)) // remove '#'
+      typeFromHash = hashParams.get('type')
     }
 
-    setMsg('📩 Te enviamos un enlace para verificar tu cuenta. Revisa tu correo.')
-    setMode('login')
+    // SOLO activar reset si el type es recovery
+    if (fromQueryRecovery || typeFromHash === 'recovery') {
+      setIsResetFlow(true)
+      setMessage('Escribe tu nueva contraseña para tu cuenta de Cugini Pizzas.')
+      return
+    }
+
+    // Si viene de verificación (signup), dar feedback amable
+    if (typeFromHash === 'signup') {
+      setMessage('✅ Tu correo fue verificado. Ahora puedes iniciar sesión.')
+      // opcional: limpiar el hash para que no se repita el mensaje al refrescar
+      if (typeof window !== 'undefined') {
+        history.replaceState(null, '', window.location.pathname)
+      }
+    }
+  }, [searchParams])
+
+  // 2) Si ya hay sesión activa, ir directo al /app
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.auth.getUser()
+      if (data?.user) {
+        window.location.href = '/app'
+      }
+    })()
+  }, [])
+
+  // -----------------------------
+  // REGISTRO (con verificación por correo)
+  // -----------------------------
+  async function handleSignUp(e: React.FormEvent) {
+    e.preventDefault()
+    setMessage(null)
+
+    if (!regFullName.trim()) {
+      setMessage('⚠️ Debes ingresar tu nombre completo.')
+      return
+    }
+    const phone = regPhone.trim()
+    const phoneRegex = /^\+56\s?9\d{8}$/ // +56 9XXXXXXXX
+    if (!phoneRegex.test(phone)) {
+      setMessage('⚠️ El número debe tener el formato +56 912345678')
+      return
+    }
+
+    if (regPassword !== regConfirmPassword) {
+      setMessage('⚠️ Las contraseñas no coinciden.')
+      return
+    }
+    if (regPassword.length < 8) {
+      setMessage('⚠️ La contraseña debe tener al menos 8 caracteres.')
+      return
+    }
+    if (!/\d/.test(regPassword)) {
+      setMessage('⚠️ La contraseña debe incluir al menos un número.')
+      return
+    }
+
+    setIsLoading(true)
+    const { error } = await supabase.auth.signUp({
+      email: regEmail,
+      password: regPassword,
+      options: {
+        emailRedirectTo: authRedirect, // volverá a /auth tras verificar
+        data: {
+          full_name: regFullName.trim(),
+          phone: phone,
+        },
+      },
+    })
+    setIsLoading(false)
+
+    if (error) {
+      if (error.message.toLowerCase().includes('already registered')) {
+        setMessage('⚠️ Ya existe una cuenta con este correo.')
+      } else {
+        setMessage('❌ Error al crear la cuenta: ' + error.message)
+      }
+      return
+    }
+
+    setPendingEmail(regEmail)
+    setCheckEmailMode(true)
+    setMessage(
+      'Te enviamos un enlace para verificar tu cuenta. Abre tu correo y sigue las instrucciones.'
+    )
   }
 
-  // ---------- LOGIN ----------
-  async function onLogin(e: React.FormEvent) {
+  // Reenviar verificación
+  async function handleResendVerification() {
+    setMessage(null)
+    if (!pendingEmail) {
+      setMessage('Ingresa un correo para reenviar la verificación.')
+      return
+    }
+    setIsLoading(true)
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: pendingEmail,
+      options: { emailRedirectTo: authRedirect },
+    })
+    setIsLoading(false)
+    if (error) {
+      setMessage('❌ No se pudo reenviar: ' + error.message)
+    } else {
+      setMessage('📩 Te reenviamos el correo de verificación.')
+    }
+  }
+
+  // -----------------------------
+  // LOGIN
+  // -----------------------------
+  async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
-    setMsg(null)
-    setLoading(true)
+    setMessage(null)
+    setIsLoading(true)
+
     const { data, error } = await supabase.auth.signInWithPassword({
       email: loginEmail,
       password: loginPassword,
     })
-    setLoading(false)
+
+    setIsLoading(false)
 
     if (error) {
-      const m = error.message?.toLowerCase() ?? ''
-      if (m.includes('email not confirmed') || m.includes('not confirmed')) {
-        return setMsg('⚠️ Debes verificar tu correo antes de iniciar sesión.')
+      const msg = error.message?.toLowerCase() ?? ''
+      if (msg.includes('email not confirmed') || msg.includes('not confirmed')) {
+        setMessage('⚠️ Debes verificar tu correo antes de iniciar sesión.')
+        setPendingEmail(loginEmail)
+        setCheckEmailMode(true)
+      } else {
+        setMessage('❌ Error al iniciar sesión: ' + error.message)
       }
-      return setMsg('❌ Error al iniciar sesión: ' + error.message)
+      return
     }
 
     if (data?.user) {
       window.location.href = '/app'
     } else {
-      setMsg('⚠️ Inicia sesión nuevamente.')
+      setMessage('⚠️ Inicia sesión nuevamente.')
     }
   }
 
-  // ---------- RESET (enviar correo) ----------
-  async function onReset(e: React.FormEvent) {
+  // -----------------------------
+  // PEDIR CORREO PARA RESET
+  // -----------------------------
+  async function handleResetPasswordRequest(e: React.FormEvent) {
     e.preventDefault()
-    setMsg(null)
-    setLoading(true)
+    setMessage(null)
+    setIsLoading(true)
+
     const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
       redirectTo: authRedirect,
     })
-    setLoading(false)
-    if (error) return setMsg('❌ Error al enviar el correo: ' + error.message)
-    setMsg('📩 Te enviamos un enlace para recuperar tu contraseña.')
-    setMode('login')
+
+    setIsLoading(false)
+
+    if (error) {
+      setMessage('❌ Error al enviar el correo: ' + error.message)
+    } else {
+      setMessage(
+        '📩 Te hemos enviado un enlace para restablecer tu contraseña. Revisa tu bandeja de entrada.'
+      )
+      setShowResetRequest(false)
+    }
   }
 
-  // ---------- NEW PASSWORD (después del correo) ----------
-  const [newPass1, setNewPass1] = useState('')
-  const [newPass2, setNewPass2] = useState('')
-  async function onNewPass(e: React.FormEvent) {
+  // -----------------------------
+  // CAMBIAR CONTRASEÑA (después del correo)
+  // -----------------------------
+  async function handleChangePassword(e: React.FormEvent) {
     e.preventDefault()
-    setMsg(null)
-    if (newPass1 !== newPass2) return setMsg('⚠️ Las contraseñas no coinciden.')
-    if (newPass1.length < 8) return setMsg('⚠️ Mínimo 8 caracteres.')
+    setMessage(null)
 
-    setLoading(true)
-    const { error } = await supabase.auth.updateUser({ password: newPass1 })
-    setLoading(false)
-    if (error) return setMsg('❌ No se pudo actualizar: ' + error.message)
-    setMsg('✅ Contraseña actualizada. Inicia sesión.')
-    setMode('login')
+    if (newPassword !== newPassword2) {
+      setMessage('⚠️ Las contraseñas no coinciden.')
+      return
+    }
+    if (newPassword.length < 8) {
+      setMessage('⚠️ La contraseña debe tener al menos 8 caracteres.')
+      return
+    }
+
+    setIsLoading(true)
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword,
+    })
+    setIsLoading(false)
+
+    if (error) {
+      setMessage('❌ No se pudo actualizar la contraseña: ' + error.message)
+    } else {
+      setMessage('✅ Tu contraseña fue actualizada. Ahora puedes iniciar sesión.')
+      setIsResetFlow(false)
+      setShowResetRequest(false)
+    }
+  }
+
+  // ============= RENDER =============
+  // Pantalla intermedia: “Revisa tu correo”
+  if (checkEmailMode && !isResetFlow) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-100 p-4">
+        <div className="bg-white shadow-md rounded-xl p-6 w-full max-w-sm space-y-3">
+          <h2 className="text-2xl font-bold text-green-700 text-center">Revisa tu correo</h2>
+          <p className="text-sm text-slate-600">
+            Te enviamos un enlace de verificación a{' '}
+            <span className="font-semibold">{pendingEmail}</span>. Abre el correo y haz clic en el
+            enlace para activar tu cuenta.
+          </p>
+
+          <button
+            onClick={handleResendVerification}
+            disabled={isLoading}
+            className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700"
+          >
+            {isLoading ? 'Enviando…' : 'Reenviar correo de verificación'}
+          </button>
+
+          <button
+            onClick={() => {
+              setCheckEmailMode(false)
+              setMessage(null)
+            }}
+            className="w-full bg-slate-100 text-slate-700 py-2 rounded hover:bg-slate-200 text-sm"
+          >
+            Volver
+          </button>
+
+          {message && (
+            <p className="mt-1 text-center text-sm text-slate-700 bg-slate-50 p-2 rounded">
+              {message}
+            </p>
+          )}
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
-      <div className="bg-white shadow rounded-xl p-6 w-full max-w-sm space-y-4">
-        <h1 className="text-2xl font-bold text-center text-green-700">Cugini Pizzas 🍕</h1>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-100 p-4">
+      <div className="bg-white shadow-md rounded-xl p-6 w-full max-w-sm">
+        <h2 className="text-2xl font-bold mb-4 text-center text-green-700">Cugini Pizzas 🍕</h2>
 
-        {mode === 'signup' && (
-          <form onSubmit={onSignup} className="space-y-2">
-            <input className="w-full border rounded px-3 py-2" placeholder="Nombre completo"
-              value={fullName} onChange={e=>setFullName(e.target.value)} required />
-            <input className="w-full border rounded px-3 py-2" placeholder="Número WhatsApp (+56 9XXXXXXXX)"
-              value={phone} onChange={e=>setPhone(e.target.value)} required />
-            <input className="w-full border rounded px-3 py-2" type="email" placeholder="Correo"
-              value={email} onChange={e=>setEmail(e.target.value)} required />
-            <input className="w-full border rounded px-3 py-2" type="password" placeholder="Contraseña"
-              value={password} onChange={e=>setPassword(e.target.value)} required />
-            <input className="w-full border rounded px-3 py-2" type="password" placeholder="Repetir contraseña"
-              value={password2} onChange={e=>setPassword2(e.target.value)} required />
-            <button disabled={loading} className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700">
-              {loading ? 'Creando…' : 'Crear cuenta'}
+        {isResetFlow ? (
+          // MODO: VIENE DEL CORREO (reset)
+          <form onSubmit={handleChangePassword} className="space-y-3">
+            <p className="text-sm text-slate-600">Ingresa tu nueva contraseña.</p>
+            <input
+              type="password"
+              placeholder="Nueva contraseña"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              required
+              className="w-full border rounded px-3 py-2"
+            />
+            <input
+              type="password"
+              placeholder="Repetir nueva contraseña"
+              value={newPassword2}
+              onChange={(e) => setNewPassword2(e.target.value)}
+              required
+              className="w-full border rounded px-3 py-2"
+            />
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700"
+            >
+              {isLoading ? 'Guardando...' : 'Guardar nueva contraseña'}
             </button>
-            <p className="text-xs text-center">
-              ¿Ya tienes cuenta?{' '}
-              <span className="text-blue-600 cursor-pointer" onClick={()=>setMode('login')}>Inicia sesión</span>
+            <button
+              type="button"
+              onClick={() => {
+                setIsResetFlow(false)
+                setShowResetRequest(false)
+                setMessage(null)
+              }}
+              className="w-full bg-slate-100 text-slate-700 py-2 rounded hover:bg-slate-200 text-sm"
+            >
+              Volver al inicio de sesión
+            </button>
+          </form>
+        ) : !showResetRequest ? (
+          <>
+            {/* REGISTRO */}
+            <form onSubmit={handleSignUp} className="space-y-3 mb-6">
+              <input
+                type="text"
+                placeholder="Nombre completo"
+                value={regFullName}
+                onChange={(e) => setRegFullName(e.target.value)}
+                required
+                className="w-full border rounded px-3 py-2"
+              />
+              <input
+                type="text"
+                placeholder="Número de WhatsApp"
+                value={regPhone}
+                onChange={(e) => setRegPhone(e.target.value)}
+                required
+                className="w-full border rounded px-3 py-2"
+              />
+              <p className="text-xs text-slate-400 ml-1">Ejemplo: +56 912345678</p>
+
+              <input
+                type="email"
+                placeholder="Correo electrónico"
+                value={regEmail}
+                onChange={(e) => setRegEmail(e.target.value)}
+                required
+                className="w-full border rounded px-3 py-2"
+              />
+              <input
+                type="password"
+                placeholder="Contraseña"
+                value={regPassword}
+                onChange={(e) => setRegPassword(e.target.value)}
+                required
+                className="w-full border rounded px-3 py-2"
+              />
+              <input
+                type="password"
+                placeholder="Repetir contraseña"
+                value={regConfirmPassword}
+                onChange={(e) => setRegConfirmPassword(e.target.value)}
+                required
+                className="w-full border rounded px-3 py-2"
+              />
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700"
+              >
+                {isLoading ? 'Creando cuenta...' : 'Crear cuenta'}
+              </button>
+            </form>
+
+            {/* LOGIN */}
+            <form onSubmit={handleLogin} className="space-y-3">
+              <h3 className="text-center text-slate-600 text-sm mb-1">¿Ya tienes cuenta?</h3>
+              <input
+                type="email"
+                placeholder="Correo electrónico"
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                required
+                className="w-full border rounded px-3 py-2"
+              />
+              <input
+                type="password"
+                placeholder="Contraseña"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                required
+                className="w-full border rounded px-3 py-2"
+              />
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full bg-slate-700 text-white py-2 rounded hover:bg-slate-800"
+              >
+                {isLoading ? 'Ingresando...' : 'Iniciar sesión'}
+              </button>
+              <p
+                onClick={() => setShowResetRequest(true)}
+                className="text-xs text-center text-blue-600 mt-2 cursor-pointer hover:underline"
+              >
+                ¿Olvidaste tu contraseña?
+              </p>
+            </form>
+          </>
+        ) : (
+          // MODO: pedir correo para reset
+          <form onSubmit={handleResetPasswordRequest} className="space-y-3">
+            <p className="text-sm text-slate-600">
+              Ingresa tu correo y te enviaremos un enlace.
+            </p>
+            <input
+              type="email"
+              placeholder="Correo electrónico"
+              value={resetEmail}
+              onChange={(e) => setResetEmail(e.target.value)}
+              required
+              className="w-full border rounded px-3 py-2"
+            />
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700"
+            >
+              {isLoading ? 'Enviando...' : 'Enviar enlace'}
+            </button>
+            <p
+              onClick={() => setShowResetRequest(false)}
+              className="text-xs text-center text-blue-600 mt-2 cursor-pointer hover:underline"
+            >
+              Volver
             </p>
           </form>
         )}
 
-        {mode === 'login' && (
-          <form onSubmit={onLogin} className="space-y-2">
-            <input className="w-full border rounded px-3 py-2" type="email" placeholder="Correo"
-              value={loginEmail} onChange={e=>setLoginEmail(e.target.value)} required />
-            <input className="w-full border rounded px-3 py-2" type="password" placeholder="Contraseña"
-              value={loginPassword} onChange={e=>setLoginPassword(e.target.value)} required />
-            <button disabled={loading} className="w-full bg-slate-700 text-white py-2 rounded hover:bg-slate-800">
-              {loading ? 'Ingresando…' : 'Iniciar sesión'}
-            </button>
-            <div className="text-xs text-center space-x-2">
-              <span className="text-blue-600 cursor-pointer" onClick={()=>setMode('reset')}>¿Olvidaste tu contraseña?</span>
-              <span>•</span>
-              <span className="text-blue-600 cursor-pointer" onClick={()=>setMode('signup')}>Crear cuenta</span>
-            </div>
-          </form>
+        {message && !checkEmailMode && (
+          <p className="mt-4 text-center text-sm text-slate-700 bg-slate-50 p-2 rounded">
+            {message}
+          </p>
         )}
-
-        {mode === 'reset' && (
-          <form onSubmit={onReset} className="space-y-2">
-            <input className="w-full border rounded px-3 py-2" type="email" placeholder="Tu correo"
-              value={resetEmail} onChange={e=>setResetEmail(e.target.value)} required />
-            <button disabled={loading} className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700">
-              {loading ? 'Enviando…' : 'Enviar enlace'}
-            </button>
-            <p className="text-xs text-center">
-              <span className="text-blue-600 cursor-pointer" onClick={()=>setMode('login')}>Volver</span>
-            </p>
-          </form>
-        )}
-
-        {mode === 'newpass' && (
-          <form onSubmit={onNewPass} className="space-y-2">
-            <input className="w-full border rounded px-3 py-2" type="password" placeholder="Nueva contraseña"
-              value={newPass1} onChange={e=>setNewPass1(e.target.value)} required />
-            <input className="w-full border rounded px-3 py-2" type="password" placeholder="Repetir contraseña"
-              value={newPass2} onChange={e=>setNewPass2(e.target.value)} required />
-            <button disabled={loading} className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700">
-              {loading ? 'Guardando…' : 'Guardar'}
-            </button>
-            <p className="text-xs text-center">
-              <span className="text-blue-600 cursor-pointer" onClick={()=>setMode('login')}>Volver</span>
-            </p>
-          </form>
-        )}
-
-        {msg && <p className="text-sm bg-slate-50 border rounded p-2 text-center">{msg}</p>}
       </div>
     </div>
   )
