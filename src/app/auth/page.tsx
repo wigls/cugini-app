@@ -1,138 +1,158 @@
-'use client'
+'use client';
 
-import { useState, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
-import { supabase } from '../../lib/supabase'
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { supabase } from '../../lib/supabase';
 
-export default function AuthPage() {
-  const searchParams = useSearchParams()
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  (typeof window !== 'undefined' ? window.location.origin : 'https://cugini-app.vercel.app');
+
+const AUTH_REDIRECT = `${SITE_URL}/auth`;
+
+/** Envoltura requerida para useSearchParams en Next 15/16 */
+function AuthInner() {
+  const searchParams = useSearchParams();
 
   // ---------- ESTADOS REGISTRO ----------
-  const [regEmail, setRegEmail] = useState('')
-  const [regPassword, setRegPassword] = useState('')
-  const [regConfirmPassword, setRegConfirmPassword] = useState('')
-  const [regFullName, setRegFullName] = useState('')
-  const [regPhone, setRegPhone] = useState('')
+  const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regConfirmPassword, setRegConfirmPassword] = useState('');
+  const [regFullName, setRegFullName] = useState('');
+  const [regPhone, setRegPhone] = useState('');
 
   // ---------- ESTADOS LOGIN ----------
-  const [loginEmail, setLoginEmail] = useState('')
-  const [loginPassword, setLoginPassword] = useState('')
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
 
   // ---------- RESET ----------
-  const [resetEmail, setResetEmail] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [newPassword2, setNewPassword2] = useState('')
-  const [isResetFlow, setIsResetFlow] = useState(false)
-  const [showResetRequest, setShowResetRequest] = useState(false)
+  const [resetEmail, setResetEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newPassword2, setNewPassword2] = useState('');
+  const [isResetFlow, setIsResetFlow] = useState(false);
+  const [showResetRequest, setShowResetRequest] = useState(false);
 
   // ---------- GENERALES ----------
-  const [message, setMessage] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
+  const [message, setMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Modo post-registro: “revisa tu correo”
-  const [checkEmailMode, setCheckEmailMode] = useState(false)
-  const [pendingEmail, setPendingEmail] = useState('')
+  const [checkEmailMode, setCheckEmailMode] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState('');
 
-  // detectar si viene desde el correo (hash o query) para reset
+  // Detectar si venimos desde correo (hash o query) para reset
   useEffect(() => {
-    const byQuery = searchParams.get('type') === 'recovery'
-    const hash = typeof window !== 'undefined' ? window.location.hash : ''
+    const byQuery = searchParams.get('type') === 'recovery';
+    const hash = typeof window !== 'undefined' ? window.location.hash : '';
     const byHash =
       hash.includes('type=recovery') ||
       hash.includes('recovery') ||
-      hash.includes('access_token=')
+      hash.includes('access_token=');
 
     if (byQuery || byHash) {
-      setIsResetFlow(true)
-      setMessage('Escribe tu nueva contraseña para tu cuenta de Cugini Pizzas.')
+      setIsResetFlow(true);
+      setMessage('Escribe tu nueva contraseña para tu cuenta de Cugini Pizzas.');
     }
-  }, [searchParams])
+  }, [searchParams]);
 
-  const origin =
-    typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
-  const authRedirect = `${origin}/auth`
+  // Asegurar sesión válida al llegar desde links (recovery / magic)
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsResetFlow(true);
+      }
+      if (event === 'SIGNED_IN') {
+        // si llega con sesión lista, podemos enviar a /app si no estamos en reset
+        if (!isResetFlow) window.location.href = '/app';
+      }
+    });
+    return () => {
+      sub.subscription.unsubscribe();
+    };
+  }, [isResetFlow]);
 
   // -----------------------------
-  // REGISTRO  (siempre exige verificación de correo)
+  // REGISTRO (exige verificación correo)
   // -----------------------------
   async function handleSignUp(e: React.FormEvent) {
-    e.preventDefault()
-    setMessage(null)
+    e.preventDefault();
+    setMessage(null);
 
     if (!regFullName.trim()) {
-      setMessage('⚠️ Debes ingresar tu nombre completo.')
-      return
+      setMessage('⚠️ Debes ingresar tu nombre completo.');
+      return;
     }
-    const phone = regPhone.trim()
-    const phoneRegex = /^\+56\s?9\d{8}$/ // +56 9XXXXXXXX
+    const phone = regPhone.trim();
+    const phoneRegex = /^\+56\s?9\d{8}$/; // +56 9XXXXXXXX
     if (!phoneRegex.test(phone)) {
-      setMessage('⚠️ El número debe tener el formato +56 912345678')
-      return
+      setMessage('⚠️ El número debe tener el formato +56 912345678');
+      return;
     }
 
     if (regPassword !== regConfirmPassword) {
-      setMessage('⚠️ Las contraseñas no coinciden.')
-      return
+      setMessage('⚠️ Las contraseñas no coinciden.');
+      return;
     }
     if (regPassword.length < 8) {
-      setMessage('⚠️ La contraseña debe tener al menos 8 caracteres.')
-      return
+      setMessage('⚠️ La contraseña debe tener al menos 8 caracteres.');
+      return;
     }
     if (!/\d/.test(regPassword)) {
-      setMessage('⚠️ La contraseña debe incluir al menos un número.')
-      return
+      setMessage('⚠️ La contraseña debe incluir al menos un número.');
+      return;
     }
 
-    setIsLoading(true)
-    const { data, error } = await supabase.auth.signUp({
+    setIsLoading(true);
+    const { error } = await supabase.auth.signUp({
       email: regEmail,
       password: regPassword,
       options: {
-        emailRedirectTo: authRedirect, // tras verificar, volverá a /auth
+        emailRedirectTo: AUTH_REDIRECT, // en Supabase → Redirect URLs debe estar permitido
         data: {
           full_name: regFullName.trim(),
           phone: phone,
         },
       },
-    })
-    setIsLoading(false)
+    });
+    setIsLoading(false);
 
     if (error) {
-      if (error.message.toLowerCase().includes('already registered')) {
-        setMessage('⚠️ Ya existe una cuenta con este correo.')
+      const msg = error.message?.toLowerCase() ?? '';
+      if (msg.includes('already registered')) {
+        setMessage('⚠️ Ya existe una cuenta con este correo.');
+      } else if (msg.includes('redirect')) {
+        setMessage('❌ Error de redirección (verifica Redirect URLs en Supabase).');
       } else {
-        setMessage('❌ Error al crear la cuenta: ' + error.message)
+        setMessage('❌ Error al crear la cuenta: ' + error.message);
       }
-      return
+      return;
     }
 
-    // Si tu proyecto permite autologin (session no-nula), podrías upsert profile aquí.
-    // Pero como vamos a exigir confirmación, mostramos SIEMPRE la pantalla de “revisa tu correo”.
-    setPendingEmail(regEmail)
-    setCheckEmailMode(true)
+    setPendingEmail(regEmail);
+    setCheckEmailMode(true);
     setMessage(
       'Te enviamos un enlace para verificar tu cuenta. Abre tu correo y sigue las instrucciones.'
-    )
+    );
   }
 
   // Reenviar verificación
   async function handleResendVerification() {
-    setMessage(null)
+    setMessage(null);
     if (!pendingEmail) {
-      setMessage('Ingresa un correo para reenviar la verificación.')
-      return
+      setMessage('Ingresa un correo para reenviar la verificación.');
+      return;
     }
-    setIsLoading(true)
+    setIsLoading(true);
     const { error } = await supabase.auth.resend({
       type: 'signup',
       email: pendingEmail,
-      options: { emailRedirectTo: authRedirect },
-    })
-    setIsLoading(false)
+      options: { emailRedirectTo: AUTH_REDIRECT },
+    });
+    setIsLoading(false);
     if (error) {
-      setMessage('❌ No se pudo reenviar: ' + error.message)
+      setMessage('❌ No se pudo reenviar: ' + error.message);
     } else {
-      setMessage('📩 Te reenviamos el correo de verificación.')
+      setMessage('📩 Te reenviamos el correo de verificación.');
     }
   }
 
@@ -140,36 +160,33 @@ export default function AuthPage() {
   // LOGIN
   // -----------------------------
   async function handleLogin(e: React.FormEvent) {
-    e.preventDefault()
-    setMessage(null)
-    setIsLoading(true)
+    e.preventDefault();
+    setMessage(null);
+    setIsLoading(true);
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email: loginEmail,
       password: loginPassword,
-    })
+    });
 
-    setIsLoading(false)
+    setIsLoading(false);
 
     if (error) {
-      // Mensaje específico si la cuenta no está verificada
-      const msg = error.message?.toLowerCase() ?? ''
+      const msg = error.message?.toLowerCase() ?? '';
       if (msg.includes('email not confirmed') || msg.includes('not confirmed')) {
-        setMessage('⚠️ Debes verificar tu correo antes de iniciar sesión.')
-        setPendingEmail(loginEmail)
-        setCheckEmailMode(true)
+        setMessage('⚠️ Debes verificar tu correo antes de iniciar sesión.');
+        setPendingEmail(loginEmail);
+        setCheckEmailMode(true);
       } else {
-        setMessage('❌ Error al iniciar sesión: ' + error.message)
+        setMessage('❌ Error al iniciar sesión: ' + error.message);
       }
-      return
+      return;
     }
 
-    // Sesión OK
     if (data?.user) {
-      window.location.href = '/app'
+      window.location.href = '/app';
     } else {
-      // Raro, pero por si acaso
-      setMessage('⚠️ Inicia sesión nuevamente.')
+      setMessage('⚠️ Inicia sesión nuevamente.');
     }
   }
 
@@ -177,23 +194,28 @@ export default function AuthPage() {
   // PEDIR CORREO PARA RESET
   // -----------------------------
   async function handleResetPasswordRequest(e: React.FormEvent) {
-    e.preventDefault()
-    setMessage(null)
-    setIsLoading(true)
+    e.preventDefault();
+    setMessage(null);
+    setIsLoading(true);
 
     const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-      redirectTo: authRedirect,
-    })
+      redirectTo: AUTH_REDIRECT, // IMPORTANTE: esta URL debe estar en Redirect URLs
+    });
 
-    setIsLoading(false)
+    setIsLoading(false);
 
     if (error) {
-      setMessage('❌ Error al enviar el correo: ' + error.message)
+      const m = error.message?.toLowerCase() ?? '';
+      if (m.includes('redirect')) {
+        setMessage('❌ Error de redirección (agrega la URL en Redirect URLs de Supabase).');
+      } else {
+        setMessage('❌ Error al enviar el correo: ' + error.message);
+      }
     } else {
       setMessage(
         '📩 Te hemos enviado un enlace para restablecer tu contraseña. Revisa tu bandeja de entrada.'
-      )
-      setShowResetRequest(false)
+      );
+      setShowResetRequest(false);
     }
   }
 
@@ -201,35 +223,34 @@ export default function AuthPage() {
   // CAMBIAR CONTRASEÑA (después del correo)
   // -----------------------------
   async function handleChangePassword(e: React.FormEvent) {
-    e.preventDefault()
-    setMessage(null)
+    e.preventDefault();
+    setMessage(null);
 
     if (newPassword !== newPassword2) {
-      setMessage('⚠️ Las contraseñas no coinciden.')
-      return
+      setMessage('⚠️ Las contraseñas no coinciden.');
+      return;
     }
     if (newPassword.length < 8) {
-      setMessage('⚠️ La contraseña debe tener al menos 8 caracteres.')
-      return
+      setMessage('⚠️ La contraseña debe tener al menos 8 caracteres.');
+      return;
     }
 
-    setIsLoading(true)
+    setIsLoading(true);
     const { error } = await supabase.auth.updateUser({
       password: newPassword,
-    })
-    setIsLoading(false)
+    });
+    setIsLoading(false);
 
     if (error) {
-      setMessage('❌ No se pudo actualizar la contraseña: ' + error.message)
+      setMessage('❌ No se pudo actualizar la contraseña: ' + error.message);
     } else {
-      setMessage('✅ Tu contraseña fue actualizada. Ahora puedes iniciar sesión.')
-      setIsResetFlow(false)
-      setShowResetRequest(false)
+      setMessage('✅ Tu contraseña fue actualizada. Ahora puedes iniciar sesión.');
+      setIsResetFlow(false);
+      setShowResetRequest(false);
     }
   }
 
   // ============= RENDER =============
-  // Pantalla intermedia: “Revisa tu correo”
   if (checkEmailMode && !isResetFlow) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-100 p-4">
@@ -250,8 +271,8 @@ export default function AuthPage() {
 
           <button
             onClick={() => {
-              setCheckEmailMode(false)
-              setMessage(null)
+              setCheckEmailMode(false);
+              setMessage(null);
             }}
             className="w-full bg-slate-100 text-slate-700 py-2 rounded hover:bg-slate-200 text-sm"
           >
@@ -265,7 +286,7 @@ export default function AuthPage() {
           )}
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -305,9 +326,9 @@ export default function AuthPage() {
             <button
               type="button"
               onClick={() => {
-                setIsResetFlow(false)
-                setShowResetRequest(false)
-                setMessage(null)
+                setIsResetFlow(false);
+                setShowResetRequest(false);
+                setMessage(null);
               }}
               className="w-full bg-slate-100 text-slate-700 py-2 rounded hover:bg-slate-200 text-sm"
             >
@@ -442,5 +463,13 @@ export default function AuthPage() {
         )}
       </div>
     </div>
-  )
+  );
+}
+
+export default function AuthPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-slate-100 p-6"><div className="bg-white rounded-xl shadow p-4">Cargando…</div></div>}>
+      <AuthInner />
+    </Suspense>
+  );
 }
