@@ -23,41 +23,49 @@ export default function RedeemPage() {
   const [qtyById, setQtyById] = useState<Record<number, number>>({});
 
   useEffect(() => {
+    let cancelled = false;
+
     async function load() {
       try {
-        const { data: userRes } = await supabase.auth.getUser();
-        const user = userRes.user;
+        // ✅ Más robusto al boot que getUser()
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+
         if (!user) {
-          setLoading(false);
+          if (!cancelled) setLoading(false);
+          if (typeof window !== 'undefined') window.location.href = '/auth';
           return;
         }
 
+        // saldo del usuario
         const { data: balanceRes } = await supabase
           .from('user_points')
           .select('*')
           .eq('user_id', user.id)
           .maybeSingle();
 
-        setBalance(balanceRes?.balance ?? 0);
+        if (!cancelled) setBalance(balanceRes?.balance ?? 0);
 
-        // 🔧 Asegúrate que la tabla correcta sea "rewards" (no "revisión")
+        // premios (ajusta el nombre de tabla si corresponde)
         const { data: rewardsRes, error } = await supabase
-          .from('revisión') // 👈 ajusta aquí si tu tabla real se llama distinto
+          .from('revisión') // ← si usas vista sin tilde, cámbialo a 'rewards_public'
           .select('*')
           .order('points_cost', { ascending: true });
 
         if (error) {
           console.error('❌ Error al traer premios:', error);
-          setRewards([]);
+          if (!cancelled) setRewards([]);
         } else {
           const activeOnly = (rewardsRes || []).filter((r: any) => r.is_active !== false);
-          setRewards(activeOnly);
+          if (!cancelled) setRewards(activeOnly);
         }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
+
     load();
+    return () => { cancelled = true; };
   }, []);
 
   const totalUnits = useMemo(
@@ -148,9 +156,8 @@ export default function RedeemPage() {
 
       const code = 'CUG-' + Math.floor(100000 + Math.random() * 900000).toString();
       setQtyById({});
-      window.location.href = `/app/redeem/success?code=${encodeURIComponent(
-        code
-      )}&reward=${encodeURIComponent(summary)}`;
+      window.location.href =
+        `/app/redeem/success?code=${encodeURIComponent(code)}&reward=${encodeURIComponent(summary)}`;
     } finally {
       setRedeeming(false);
     }
