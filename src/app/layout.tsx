@@ -3,6 +3,11 @@ import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
 
+// Fuerza que TODA la app sea dinámica (sin prerender en build)
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'default-no-store';
+
 const geistSans = Geist({
   variable: '--font-geist-sans',
   subsets: ['latin'],
