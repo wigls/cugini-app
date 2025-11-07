@@ -1,180 +1,190 @@
-'use client'
+'use client';
 
-import { useEffect, useMemo, useState } from 'react'
-import { supabase } from '../../../lib/supabase'
+import { useEffect, useMemo, useState } from 'react';
+import { supabase } from '../../../lib/supabase';
 
 type Reward = {
-  id: number
-  name: string
-  description: string | null
-  points_cost: number
-  image_url?: string | null
-  is_active?: boolean
-}
+  id: number;
+  name: string;
+  description: string | null;
+  points_cost: number;
+  image_url?: string | null;
+  is_active?: boolean;
+};
 
 export default function RedeemPage() {
-  const [rewards, setRewards] = useState<Reward[]>([])
-  const [balance, setBalance] = useState<number>(0)
-  const [message, setMessage] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [redeeming, setRedeeming] = useState(false)
+  const [rewards, setRewards] = useState<Reward[]>([]);
+  const [balance, setBalance] = useState<number>(0);
+  const [message, setMessage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [redeeming, setRedeeming] = useState(false);
+  const [isLogged, setIsLogged] = useState(false); // 👈 nuevo: sabemos si hay sesión
 
-  // cantidades por id de premio: { [rewardId]: qty }
-  const [qtyById, setQtyById] = useState<Record<number, number>>({})
+  // cantidades por id de premio
+  const [qtyById, setQtyById] = useState<Record<number, number>>({});
 
   useEffect(() => {
     async function load() {
       try {
-        const { data: userRes } = await supabase.auth.getUser()
-        const user = userRes.user
-        if (!user) { setLoading(false); return }
+        // 1) Intentar obtener usuario (pero NO salimos si es null)
+        const { data: userRes, error: userErr } = await supabase.auth.getUser();
+        const user = userRes?.user ?? null;
+        setIsLogged(!!user);
+        if (userErr) {
+          // no bloquea la carga de premios
+          console.warn('auth.getUser error:', userErr.message);
+        }
 
-        const { data: balanceRes } = await supabase
-          .from('user_points')
-          .select('*')
-          .eq('user_id', user.id)
-          .maybeSingle()
+        // 2) Cargar premios SIEMPRE (con o sin sesión)
+        //    Usa rewards_pub (vista sin tilde) o la tabla que prefieras
+        const { data: rewardsRes, error: rewardsErr } = await supabase
+          .from('rewards_pub') // ← si no creaste la vista, usa 'revisión'
+          .select('id,name,description,points_cost,image_url,is_active')
+          .order('points_cost', { ascending: true });
 
-        setBalance(balanceRes?.balance ?? 0)
-
-        const { data: rewardsRes, error } = await supabase
-          .from('revisión')
-          .select('*')
-          .order('points_cost', { ascending: true })
-
-        if (error) {
-          console.error('❌ Error al traer premios:', error)
-          setRewards([])
+        if (rewardsErr) {
+          console.error('❌ Error al traer premios:', rewardsErr);
+          setRewards([]);
         } else {
-          const activeOnly = (rewardsRes || []).filter((r: any) => r.is_active !== false)
-          setRewards(activeOnly)
+          const activeOnly = (rewardsRes || []).filter((r) => r.is_active !== false);
+          setRewards(activeOnly as Reward[]);
+        }
+
+        // 3) Cargar saldo solo si hay sesión
+        if (user) {
+          const { data: balanceRes, error: balErr } = await supabase
+            .from('user_points')
+            .select('balance')
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+          if (balErr) {
+            console.warn('user_points error:', balErr.message);
+          }
+          setBalance(balanceRes?.balance ?? 0);
+        } else {
+          setBalance(0);
         }
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
     }
-    load()
-  }, [])
+    load();
+  }, []);
 
   const totalUnits = useMemo(
     () => Object.values(qtyById).reduce((a, b) => a + (b || 0), 0),
     [qtyById]
-  )
+  );
 
   const totalSelected = useMemo(() => {
-    let total = 0
+    let total = 0;
     for (const r of rewards) {
-      const q = qtyById[r.id] || 0
-      if (q > 0) total += r.points_cost * q
+      const q = qtyById[r.id] || 0;
+      if (q > 0) total += r.points_cost * q;
     }
-    return total
-  }, [rewards, qtyById])
+    return total;
+  }, [rewards, qtyById]);
 
-  const overLimit = totalSelected > balance
+  const overLimit = totalSelected > balance;
 
   function incQty(id: number) {
-    if (redeeming) return
-    setMessage(null)
-    const reward = rewards.find(rr => rr.id === id)
-    const cost = reward?.points_cost ?? 0
-    const nextTotal = totalSelected + cost
-    if (nextTotal > balance) {
-      setMessage('⚠️ No te alcanzan los puntos para sumar esa unidad.')
-      return
+    if (redeeming) return;
+    setMessage(null);
+    const reward = rewards.find((rr) => rr.id === id);
+    const cost = reward?.points_cost ?? 0;
+    const nextTotal = totalSelected + cost;
+    if (isLogged && nextTotal > balance) {
+      setMessage('⚠️ No te alcanzan los puntos para sumar esa unidad.');
+      return;
     }
-    setQtyById(prev => ({ ...prev, [id]: (prev[id] || 0) + 1 }))
+    setQtyById((prev) => ({ ...prev, [id]: (prev[id] || 0) + 1 }));
   }
 
   function decQty(id: number) {
-    if (redeeming) return
-    setMessage(null)
-    setQtyById(prev => {
-      const cur = prev[id] || 0
-      const next = Math.max(0, cur - 1)
-      const copy: Record<number, number> = { ...prev, [id]: next }
-      if (next === 0) delete copy[id]
-      return copy
-    })
+    if (redeeming) return;
+    setMessage(null);
+    setQtyById((prev) => {
+      const cur = prev[id] || 0;
+      const next = Math.max(0, cur - 1);
+      const copy: Record<number, number> = { ...prev, [id]: next };
+      if (next === 0) delete copy[id];
+      return copy;
+    });
   }
 
   async function handleRedeemSelected() {
-    if (redeeming) return
-    setMessage(null)
+    setMessage(null);
+
+    // 👇 Bloquea canje si NO hay sesión
+    if (!isLogged) {
+      setMessage('🔒 Inicia sesión para canjear tus puntos.');
+      window.location.href = '/auth';
+      return;
+    }
+
+    if (redeeming) return;
 
     if (totalUnits === 0) {
-      setMessage('⚠️ No has seleccionado premios.')
-      return
+      setMessage('⚠️ No has seleccionado premios.');
+      return;
     }
     if (totalSelected > balance) {
-      setMessage(`⚠️ Seleccionaste ${totalSelected} pts y solo tienes ${balance} pts.`)
-      return
+      setMessage(`⚠️ Seleccionaste ${totalSelected} pts y solo tienes ${balance} pts.`);
+      return;
     }
 
-    setRedeeming(true)
+    setRedeeming(true);
     try {
-      let currentBalance = balance
-      const redeemedMap: Record<number, number> = {}
+      let currentBalance = balance;
+      const redeemedMap: Record<number, number> = {};
 
       for (const r of rewards) {
-        const qty = qtyById[r.id] || 0
-        if (qty <= 0) continue
+        const qty = qtyById[r.id] || 0;
+        if (qty <= 0) continue;
 
         for (let i = 0; i < qty; i++) {
-          if (currentBalance < r.points_cost) {
-            if (Object.keys(redeemedMap).length > 0) {
-              setMessage(`⚠️ No alcanzaron los puntos para canjear todas las unidades de "${r.name}". Se canjearon solo algunas.`)
-              break
-            } else {
-              setMessage('⚠️ No tienes puntos suficientes.')
-              return
-            }
-          }
+          if (currentBalance < r.points_cost) break;
 
-          const { data, error } = await supabase.rpc('redeem_reward', { p_reward_id: r.id })
+          const { data, error } = await supabase.rpc('redeem_reward', { p_reward_id: r.id });
           if (error || data !== 'OK') {
-            console.error('❌ Error al canjear:', r.name, error || data)
-            if (Object.keys(redeemedMap).length > 0) {
-              setMessage('⚠️ Se canjearon algunos premios antes de que ocurriera un error.')
-              break
-            } else {
-              setMessage('❌ Error al canjear.')
-              return
-            }
+            console.error('❌ Error al canjear:', r.name, error || data);
+            setMessage('⚠️ Hubo un problema al canjear algunos premios.');
+            break;
           }
 
-          redeemedMap[r.id] = (redeemedMap[r.id] || 0) + 1
-          currentBalance = currentBalance - r.points_cost
-
-          // sincroniza con la vista de saldo
-          const { data: userRes } = await supabase.auth.getUser()
-          const user = userRes.user
-          if (user) {
-            const { data: balanceRes } = await supabase
-              .from('user_points')
-              .select('*')
-              .eq('user_id', user.id)
-              .maybeSingle()
-            if (balanceRes?.balance !== undefined) currentBalance = balanceRes.balance
-          }
+          redeemedMap[r.id] = (redeemedMap[r.id] || 0) + 1;
+          currentBalance -= r.points_cost;
         }
       }
 
-      setBalance(currentBalance)
-      if (Object.keys(redeemedMap).length === 0) return
+      setBalance(currentBalance);
+      if (Object.keys(redeemedMap).length === 0) return;
 
       const summary = rewards
-        .filter(r => redeemedMap[r.id] > 0)
-        .map(r => `${r.name} x${redeemedMap[r.id]}`)
-        .join(', ')
+        .filter((r) => redeemedMap[r.id] > 0)
+        .map((r) => `${r.name} x${redeemedMap[r.id]}`)
+        .join(', ');
 
-      const code = 'CUG-' + Math.floor(100000 + Math.random() * 900000).toString()
-      setQtyById({})
-      window.location.href =
-        `/app/redeem/success?code=${encodeURIComponent(code)}&reward=${encodeURIComponent(summary)}`
+      const code = 'CUG-' + Math.floor(100000 + Math.random() * 900000).toString();
+      setQtyById({});
+      window.location.href = `/app/redeem/success?code=${encodeURIComponent(
+        code
+      )}&reward=${encodeURIComponent(summary)}`;
     } finally {
-      setRedeeming(false)
+      setRedeeming(false);
     }
   }
+
+  // normaliza imágenes
+  const normalizeImg = (src?: string | null) =>
+    !src
+      ? '/brand/placeholder.png'
+      : src.startsWith('http')
+      ? src
+      : src.startsWith('/')
+      ? src
+      : `/brand/${src}`;
 
   if (loading) {
     return (
@@ -184,36 +194,20 @@ export default function RedeemPage() {
             <div className="h-6 w-48 bg-slate-200 rounded mb-2" />
             <div className="h-4 w-64 bg-slate-200 rounded" />
           </div>
-
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="rounded-2xl border border-cugini-dark/10 bg-white/80 backdrop-blur p-3">
-                <div className="w-full h-36 bg-slate-200 rounded-lg mb-3" />
-                <div className="h-5 w-40 bg-slate-200 rounded mb-2" />
-                <div className="h-4 w-32 bg-slate-200 rounded mb-3" />
-                <div className="flex items-center justify-between">
-                  <div className="h-6 w-24 bg-slate-200 rounded" />
-                  <div className="flex gap-2">
-                    <div className="h-8 w-8 bg-slate-200 rounded" />
-                    <div className="h-8 w-8 bg-slate-200 rounded" />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       </div>
-    )
+    );
   }
 
   return (
     <div className="min-h-screen bg-cugini-cream px-4 py-6">
       <div className="max-w-5xl mx-auto space-y-5">
-        {/* encabezado */}
         <div className="rounded-xl border border-cugini-dark/10 bg-white/90 backdrop-blur p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div>
             <h1 className="text-xl font-extrabold text-cugini-green">Canjea tus puntos</h1>
-            <p className="text-sm text-cugini-dark/70">Elige tus favoritos y confirma el canje.</p>
+            <p className="text-sm text-cugini-dark/70">
+              Elige tus favoritos y confirma el canje.
+            </p>
           </div>
           <div className="text-sm">
             <span className="text-cugini-dark/60">Tus puntos: </span>
@@ -221,7 +215,6 @@ export default function RedeemPage() {
           </div>
         </div>
 
-        {/* barra simple (sólida) */}
         <div className="bg-white rounded shadow p-3 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-slate-600">Ítems: {totalUnits}</p>
           <p className="text-sm">
@@ -230,7 +223,7 @@ export default function RedeemPage() {
               {totalSelected}
             </span>{' '}
             pts
-            {overLimit && (
+            {isLogged && overLimit && (
               <span className="ml-2 text-red-600">
                 (te faltan {totalSelected - balance} pts)
               </span>
@@ -238,15 +231,20 @@ export default function RedeemPage() {
           </p>
           <div className="flex gap-2">
             <button
-              onClick={() => { if (!redeeming) { setQtyById({}); setMessage(null) } }}
-              className="px-3 py-1 rounded text-sm bg-slate-100 hover:bg-slate-200 disabled:opacity-60"
+              onClick={() => {
+                if (!redeeming) {
+                  setQtyById({});
+                  setMessage(null);
+                }
+              }}
+              className="px-3 py-1 rounded text-sm bg-slate-100 hover:bg-slate-200"
               disabled={redeeming}
             >
               Limpiar
             </button>
             <button
               onClick={handleRedeemSelected}
-              disabled={totalUnits === 0 || overLimit || redeeming}
+              disabled={totalUnits === 0 || (isLogged && overLimit) || redeeming}
               className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {redeeming ? 'Procesando…' : 'Canjear seleccionados'}
@@ -260,7 +258,6 @@ export default function RedeemPage() {
           </div>
         )}
 
-        {/* lista + TILE DECORATIVO AL FINAL */}
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           {rewards.length === 0 ? (
             <div className="col-span-full">
@@ -271,8 +268,9 @@ export default function RedeemPage() {
           ) : (
             <>
               {rewards.map((r) => {
-                const qty = qtyById[r.id] || 0
-                const lineTotal = qty * r.points_cost
+                const qty = qtyById[r.id] || 0;
+                const lineTotal = qty * r.points_cost;
+                const imageSrc = normalizeImg(r.image_url);
 
                 return (
                   <div
@@ -280,15 +278,12 @@ export default function RedeemPage() {
                     className="group rounded-2xl border border-cugini-dark/10 bg-white shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col"
                   >
                     <div className="relative">
-                      {r.image_url ? (
-                        <img
-                          src={r.image_url}
-                          alt={r.name}
-                          className="w-full h-40 object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-40 bg-slate-200" />
-                      )}
+                      <img
+                        src={imageSrc}
+                        alt={r.name}
+                        className="w-full h-40 object-cover"
+                        loading="lazy"
+                      />
                       <div className="absolute top-2 right-2 bg-cugini-green text-white text-xs px-2 py-1 rounded-full shadow">
                         {r.points_cost} pts
                       </div>
@@ -305,7 +300,9 @@ export default function RedeemPage() {
                           <span className="text-sm text-cugini-dark/70">
                             = <span className="font-semibold">{lineTotal}</span> pts
                           </span>
-                        ) : <span />}
+                        ) : (
+                          <span />
+                        )}
 
                         <div className="flex items-center gap-2">
                           <button
@@ -329,32 +326,33 @@ export default function RedeemPage() {
                       </div>
                     </div>
                   </div>
-                )
+                );
               })}
 
-              {/* --- TILE DECORATIVO (ajustado) --- */}
-<div
-  aria-hidden="true"
-  className="rounded-2xl border border-cugini-dark/10 bg-white shadow-sm overflow-hidden flex flex-col items-center justify-center pointer-events-none select-none"
->
-  <div className="relative flex items-center justify-center w-full h-44">
-    <img
-      src="/brand/walker.png"  // ← o la imagen que prefieras
-      alt=""
-      className="h-40 w-auto object-contain opacity-40 scale-110 transform"
-      loading="lazy"
-    />
-  </div>
-  <div className="pb-4">
-    <p className="text-center text-base font-bold text-cugini-green">
-      Cugini Pizza
-    </p>
-  </div>
-</div>
+              {/* Tile decorativo */}
+              <div
+                aria-hidden="true"
+                className="rounded-2xl border border-cugini-dark/10 bg-white shadow-sm overflow-hidden flex flex-col items-center justify-center pointer-events-none select-none"
+              >
+                <div className="relative flex items-center justify-center w-full h-44">
+                  <img
+                    src="/brand/walker.png"
+                    alt=""
+                    className="h-40 w-auto object-contain opacity-40 scale-110 transform"
+                    loading="lazy"
+                  />
+                </div>
+                <div className="pb-4">
+                  <p className="text-center text-base font-bold text-cugini-green">
+                    Cugini Pizza
+                  </p>
+                </div>
+              </div>
             </>
           )}
         </div>
       </div>
     </div>
-  )
+  );
 }
+ 
