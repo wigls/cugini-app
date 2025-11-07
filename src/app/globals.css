@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+/* 🎨 Paleta Cugini */
+:root {
+  --cugini-cream: #F7F1E6;
+  --cugini-green: #1B7A3A;
+  --cugini-red: #D6452E;
+  --cugini-dark: #0E3E1E;
+
+  /* variables generales */
+  --background: var(--cugini-cream);
+  --foreground: var(--cugini-dark);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* 🌙 modo oscuro opcional */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+/* 🧁 Fondo y texto base */
+html, body {
+  background-color: #F7F1E6; /* 🎨 fondo crema Cugini */
+  color: var(--foreground);
+  font-family: "Poppins", "Inter", Arial, Helvetica, sans-serif;
+  font-weight: 400;
+  line-height: 1.6;
+  transition: background 0.3s ease, color 0.3s ease;
+
+}
+
+/* 💚 Detalles Cugini comunes */
+a {
+  color: var(--cugini-green);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--cugini-red);
+}
+
+/* Botones genéricos si no tienen clase Tailwind */
+button {
+  font-weight: 600;
+  border-radius: 0.5rem;
+}
+
+/* Sombras suaves como en la carta */
+.card {
+  background-color: #fff;
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+}
+
+/* Encabezados */
+h1, h2, h3, h4 {
+  color: var(--cugini-dark);
+  font-weight: 700;
+}
+
+/* 🧩 Fondo de la app (por si algún contenedor no usa Tailwind) */
+.app-bg {
+  background-color: var(--cugini-cream);
+}
