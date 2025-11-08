@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
 
@@ -25,13 +25,18 @@ export default function AuthPage() {
   const [isResetFlow, setIsResetFlow] = useState(false);
   const [showResetRequest, setShowResetRequest] = useState(false);
 
+  // Pantallas intermedias
+  const [checkEmailMode, setCheckEmailMode] = useState(false); // verificación de signup
+  const [pendingEmail, setPendingEmail] = useState('');
+  const [resetEmailMode, setResetEmailMode] = useState(false); // NUEVO: “te enviamos el enlace”
+  const [pendingResetEmail, setPendingResetEmail] = useState('');
+
   // ---------- GENERALES ----------
   const [message, setMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Modo post-registro: “revisa tu correo”
-  const [checkEmailMode, setCheckEmailMode] = useState(false);
-  const [pendingEmail, setPendingEmail] = useState('');
+  // Evitar redirección automática al /app cuando venimos con recovery
+  const arrivingFromRecoveryRef = useRef(false);
 
   // URL base para los redirects
   const origin =
@@ -39,22 +44,17 @@ export default function AuthPage() {
   const authRedirect = `${origin}/auth`;
 
   /**
-   * Utilidad: asegura que exista/sincronice la fila de profiles
-   * y que metadata (auth.users) tenga full_name/phone actualizados.
-   * - Se usa al volver del correo de verificación (type=signup),
-   * - y después de un login exitoso.
+   * Sincroniza/crea profiles con metadata (se usa post-signup verificado y al iniciar sesión).
    */
   async function ensureProfileFromAuth() {
     const { data: userRes } = await supabase.auth.getUser();
     const user = userRes?.user;
     if (!user) return;
 
-    // Leer metadata actual
     const meta = (user.user_metadata ?? {}) as Record<string, any>;
     const metaName = (meta.full_name ?? '').toString().trim();
     const metaPhone = (meta.phone ?? '').toString().trim();
 
-    // 1) Upsert en profiles (crea/actualiza la fila del usuario)
     const { error: upErr } = await supabase
       .from('profiles')
       .upsert(
@@ -65,39 +65,61 @@ export default function AuthPage() {
         },
         { onConflict: 'user_id' }
       );
-    if (upErr) {
-      // No detiene el flujo, pero deja traza.
-      console.warn('[profiles upsert after auth]', upErr.message);
-    }
+
+    if (upErr) console.warn('[profiles upsert after auth]', upErr.message);
   }
 
-  // 1) Detectar si viene desde enlace de correo
+  /**
+   * Parsea el hash que envía Supabase en magic/recovery links.
+   */
+  function parseHash() {
+    if (typeof window === 'undefined' || !window.location.hash) return new URLSearchParams();
+    return new URLSearchParams(window.location.hash.slice(1));
+  }
+
+  // 1) Detectar si viene desde enlace de correo (signup o recovery)
   useEffect(() => {
-    // query param (algunos providers pueden usar ?type=recovery)
     const fromQueryRecovery = searchParams.get('type') === 'recovery';
+    const hashParams = parseHash();
+    const typeFromHash = hashParams.get('type');
 
-    // fragment/hash que usa Supabase: #access_token=...&type=signup|recovery|magiclink...
-    let typeFromHash: string | null = null;
-    if (typeof window !== 'undefined' && window.location.hash) {
-      const hashParams = new URLSearchParams(window.location.hash.slice(1)); // remove '#'
-      typeFromHash = hashParams.get('type');
-    }
-
-    // SOLO activar reset si el type es recovery
+    // Si es recovery: NO redirigir al /app, y levantar la sesión con los tokens del hash
     if (fromQueryRecovery || typeFromHash === 'recovery') {
-      setIsResetFlow(true);
-      setMessage('Escribe tu nueva contraseña para tu cuenta de Cugini Pizzas.');
-      return;
+      arrivingFromRecoveryRef.current = true;
+
+      const access_token = hashParams.get('access_token');
+      const refresh_token = hashParams.get('refresh_token');
+
+      (async () => {
+        try {
+          // Si vienen tokens en el hash, establece la sesión para poder cambiar contraseña
+          if (access_token && refresh_token) {
+            const { error: setErr } = await supabase.auth.setSession({
+              access_token,
+              refresh_token,
+            });
+            if (setErr) console.warn('setSession (recovery) error:', setErr.message);
+          }
+        } finally {
+          setIsResetFlow(true);
+          setMessage('Escribe tu nueva contraseña para tu cuenta de Cugini Pizzas.');
+          // Limpia el hash para que no “parpadee” al refrescar
+          if (typeof window !== 'undefined') {
+            history.replaceState(null, '', window.location.pathname);
+          }
+        }
+      })();
+
+      return; // no procesar “signup” si ya estamos en recovery
     }
 
-    // Si viene de verificación (signup), sincronizamos y avisamos
+    // Si viene de verificación (signup), sincroniza profile y avisa
     if (typeFromHash === 'signup') {
       (async () => {
         try {
-          await ensureProfileFromAuth(); // crea/sincroniza profiles usando metadata
+          await ensureProfileFromAuth();
           setMessage('✅ Tu correo fue verificado. Ahora puedes iniciar sesión.');
         } finally {
-          // Limpia el hash para no repetir el mensaje al refrescar
           if (typeof window !== 'undefined') {
             history.replaceState(null, '', window.location.pathname);
           }
@@ -106,9 +128,10 @@ export default function AuthPage() {
     }
   }, [searchParams]);
 
-  // 2) Si ya hay sesión activa, ir directo al /app
+  // 2) Redirección automática al /app solo si NO estamos en flujo de recovery
   useEffect(() => {
     (async () => {
+      if (arrivingFromRecoveryRef.current) return; // no redirigir, estamos en reset
       const { data } = await supabase.auth.getUser();
       if (data?.user) {
         window.location.href = '/app';
@@ -170,7 +193,6 @@ export default function AuthPage() {
       return;
     }
 
-    // Pantalla "revisa tu correo"
     setPendingEmail(regEmail);
     setCheckEmailMode(true);
     setMessage(
@@ -227,7 +249,6 @@ export default function AuthPage() {
     }
 
     if (data?.user) {
-      // Sincroniza/crea profile desde metadata por si faltaba (cuentas antiguas)
       await ensureProfileFromAuth();
       window.location.href = '/app';
     } else {
@@ -244,7 +265,7 @@ export default function AuthPage() {
     setIsLoading(true);
 
     const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-      redirectTo: authRedirect,
+      redirectTo: authRedirect, // el link volverá a /auth con #type=recovery...
     });
 
     setIsLoading(false);
@@ -252,10 +273,13 @@ export default function AuthPage() {
     if (error) {
       setMessage('❌ Error al enviar el correo: ' + error.message);
     } else {
-      setMessage(
-        '📩 Te hemos enviado un enlace para restablecer tu contraseña. Revisa tu bandeja de entrada.'
-      );
+      // NUEVO: pantalla dedicada de “te enviamos el enlace”
+      setPendingResetEmail(resetEmail);
+      setResetEmailMode(true);
       setShowResetRequest(false);
+      setMessage(
+        'Te enviamos un enlace para restablecer tu contraseña. Revisa tu bandeja de entrada.'
+      );
     }
   }
 
@@ -291,7 +315,8 @@ export default function AuthPage() {
   }
 
   // ============= RENDER =============
-  // Pantalla intermedia: “Revisa tu correo”
+
+  // 1) Pantalla “Revisa tu correo” (signup)
   if (checkEmailMode && !isResetFlow) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-100 p-4">
@@ -331,6 +356,39 @@ export default function AuthPage() {
     );
   }
 
+  // 2) Pantalla “Te enviamos el enlace para restablecer” (password reset) — NUEVO
+  if (resetEmailMode && !isResetFlow) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-100 p-4">
+        <div className="bg-white shadow-md rounded-xl p-6 w-full max-w-sm space-y-3">
+          <h2 className="text-2xl font-bold text-green-700 text-center">Revisa tu correo</h2>
+          <p className="text-sm text-slate-600">
+            Te enviamos un enlace para restablecer tu contraseña a{' '}
+            <span className="font-semibold">{pendingResetEmail}</span>. Abre el correo y sigue las
+            instrucciones.
+          </p>
+
+          <button
+            onClick={() => {
+              setResetEmailMode(false);
+              setMessage(null);
+            }}
+            className="w-full bg-slate-100 text-slate-700 py-2 rounded hover:bg-slate-200 text-sm"
+          >
+            Volver al inicio de sesión
+          </button>
+
+          {message && (
+            <p className="mt-1 text-center text-sm text-slate-700 bg-slate-50 p-2 rounded">
+              {message}
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // 3) UI principal (login/registro o cambio de contraseña si isResetFlow)
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-100 p-4">
       <div className="bg-white shadow-md rounded-xl p-6 w-full max-w-sm">
@@ -374,6 +432,11 @@ export default function AuthPage() {
             >
               Volver al inicio de sesión
             </button>
+            {message && (
+              <p className="mt-2 text-center text-sm text-slate-700 bg-slate-50 p-2 rounded">
+                {message}
+              </p>
+            )}
           </form>
         ) : !showResetRequest ? (
           <>
@@ -463,6 +526,12 @@ export default function AuthPage() {
                 ¿Olvidaste tu contraseña?
               </p>
             </form>
+
+            {message && (
+              <p className="mt-4 text-center text-sm text-slate-700 bg-slate-50 p-2 rounded">
+                {message}
+              </p>
+            )}
           </>
         ) : (
           // MODO: pedir correo para reset
@@ -491,13 +560,12 @@ export default function AuthPage() {
             >
               Volver
             </p>
+            {message && (
+              <p className="mt-2 text-center text-sm text-slate-700 bg-slate-50 p-2 rounded">
+                {message}
+              </p>
+            )}
           </form>
-        )}
-
-        {message && !checkEmailMode && (
-          <p className="mt-4 text-center text-sm text-slate-700 bg-slate-50 p-2 rounded">
-            {message}
-          </p>
         )}
       </div>
     </div>
