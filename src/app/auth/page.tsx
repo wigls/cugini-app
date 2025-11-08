@@ -1,114 +1,153 @@
-'use client'
+'use client';
 
-import { useState, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
-import { supabase } from '../../lib/supabase'
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { supabase } from '../../lib/supabase';
 
 export default function AuthPage() {
-  const searchParams = useSearchParams()
+  const searchParams = useSearchParams();
 
   // ---------- ESTADOS REGISTRO ----------
-  const [regEmail, setRegEmail] = useState('')
-  const [regPassword, setRegPassword] = useState('')
-  const [regConfirmPassword, setRegConfirmPassword] = useState('')
-  const [regFullName, setRegFullName] = useState('')
-  const [regPhone, setRegPhone] = useState('')
+  const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regConfirmPassword, setRegConfirmPassword] = useState('');
+  const [regFullName, setRegFullName] = useState('');
+  const [regPhone, setRegPhone] = useState('');
 
   // ---------- ESTADOS LOGIN ----------
-  const [loginEmail, setLoginEmail] = useState('')
-  const [loginPassword, setLoginPassword] = useState('')
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
 
   // ---------- RESET ----------
-  const [resetEmail, setResetEmail] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [newPassword2, setNewPassword2] = useState('')
-  const [isResetFlow, setIsResetFlow] = useState(false)
-  const [showResetRequest, setShowResetRequest] = useState(false)
+  const [resetEmail, setResetEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newPassword2, setNewPassword2] = useState('');
+  const [isResetFlow, setIsResetFlow] = useState(false);
+  const [showResetRequest, setShowResetRequest] = useState(false);
 
   // ---------- GENERALES ----------
-  const [message, setMessage] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
+  const [message, setMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Modo post-registro: “revisa tu correo”
-  const [checkEmailMode, setCheckEmailMode] = useState(false)
-  const [pendingEmail, setPendingEmail] = useState('')
+  const [checkEmailMode, setCheckEmailMode] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState('');
 
   // URL base para los redirects
   const origin =
-    typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
-  const authRedirect = `${origin}/auth`
+    typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+  const authRedirect = `${origin}/auth`;
+
+  /**
+   * Utilidad: asegura que exista/sincronice la fila de profiles
+   * y que metadata (auth.users) tenga full_name/phone actualizados.
+   * - Se usa al volver del correo de verificación (type=signup),
+   * - y después de un login exitoso.
+   */
+  async function ensureProfileFromAuth() {
+    const { data: userRes } = await supabase.auth.getUser();
+    const user = userRes?.user;
+    if (!user) return;
+
+    // Leer metadata actual
+    const meta = (user.user_metadata ?? {}) as Record<string, any>;
+    const metaName = (meta.full_name ?? '').toString().trim();
+    const metaPhone = (meta.phone ?? '').toString().trim();
+
+    // 1) Upsert en profiles (crea/actualiza la fila del usuario)
+    const { error: upErr } = await supabase
+      .from('profiles')
+      .upsert(
+        {
+          user_id: user.id,
+          full_name: metaName || null,
+          phone: metaPhone || null,
+        },
+        { onConflict: 'user_id' }
+      );
+    if (upErr) {
+      // No detiene el flujo, pero deja traza.
+      console.warn('[profiles upsert after auth]', upErr.message);
+    }
+  }
 
   // 1) Detectar si viene desde enlace de correo
   useEffect(() => {
     // query param (algunos providers pueden usar ?type=recovery)
-    const fromQueryRecovery = searchParams.get('type') === 'recovery'
+    const fromQueryRecovery = searchParams.get('type') === 'recovery';
 
     // fragment/hash que usa Supabase: #access_token=...&type=signup|recovery|magiclink...
-    let typeFromHash: string | null = null
+    let typeFromHash: string | null = null;
     if (typeof window !== 'undefined' && window.location.hash) {
-      const hashParams = new URLSearchParams(window.location.hash.slice(1)) // remove '#'
-      typeFromHash = hashParams.get('type')
+      const hashParams = new URLSearchParams(window.location.hash.slice(1)); // remove '#'
+      typeFromHash = hashParams.get('type');
     }
 
     // SOLO activar reset si el type es recovery
     if (fromQueryRecovery || typeFromHash === 'recovery') {
-      setIsResetFlow(true)
-      setMessage('Escribe tu nueva contraseña para tu cuenta de Cugini Pizzas.')
-      return
+      setIsResetFlow(true);
+      setMessage('Escribe tu nueva contraseña para tu cuenta de Cugini Pizzas.');
+      return;
     }
 
-    // Si viene de verificación (signup), dar feedback amable
+    // Si viene de verificación (signup), sincronizamos y avisamos
     if (typeFromHash === 'signup') {
-      setMessage('✅ Tu correo fue verificado. Ahora puedes iniciar sesión.')
-      // opcional: limpiar el hash para que no se repita el mensaje al refrescar
-      if (typeof window !== 'undefined') {
-        history.replaceState(null, '', window.location.pathname)
-      }
+      (async () => {
+        try {
+          await ensureProfileFromAuth(); // crea/sincroniza profiles usando metadata
+          setMessage('✅ Tu correo fue verificado. Ahora puedes iniciar sesión.');
+        } finally {
+          // Limpia el hash para no repetir el mensaje al refrescar
+          if (typeof window !== 'undefined') {
+            history.replaceState(null, '', window.location.pathname);
+          }
+        }
+      })();
     }
-  }, [searchParams])
+  }, [searchParams]);
 
   // 2) Si ya hay sesión activa, ir directo al /app
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.auth.getUser()
+      const { data } = await supabase.auth.getUser();
       if (data?.user) {
-        window.location.href = '/app'
+        window.location.href = '/app';
       }
-    })()
-  }, [])
+    })();
+  }, []);
 
   // -----------------------------
   // REGISTRO (con verificación por correo)
   // -----------------------------
   async function handleSignUp(e: React.FormEvent) {
-    e.preventDefault()
-    setMessage(null)
+    e.preventDefault();
+    setMessage(null);
 
     if (!regFullName.trim()) {
-      setMessage('⚠️ Debes ingresar tu nombre completo.')
-      return
+      setMessage('⚠️ Debes ingresar tu nombre completo.');
+      return;
     }
-    const phone = regPhone.trim()
-    const phoneRegex = /^\+56\s?9\d{8}$/ // +56 9XXXXXXXX
+    const phone = regPhone.trim();
+    const phoneRegex = /^\+56\s?9\d{8}$/; // +56 9XXXXXXXX
     if (!phoneRegex.test(phone)) {
-      setMessage('⚠️ El número debe tener el formato +56 912345678')
-      return
+      setMessage('⚠️ El número debe tener el formato +56 912345678');
+      return;
     }
 
     if (regPassword !== regConfirmPassword) {
-      setMessage('⚠️ Las contraseñas no coinciden.')
-      return
+      setMessage('⚠️ Las contraseñas no coinciden.');
+      return;
     }
     if (regPassword.length < 8) {
-      setMessage('⚠️ La contraseña debe tener al menos 8 caracteres.')
-      return
+      setMessage('⚠️ La contraseña debe tener al menos 8 caracteres.');
+      return;
     }
     if (!/\d/.test(regPassword)) {
-      setMessage('⚠️ La contraseña debe incluir al menos un número.')
-      return
+      setMessage('⚠️ La contraseña debe incluir al menos un número.');
+      return;
     }
 
-    setIsLoading(true)
+    setIsLoading(true);
     const { error } = await supabase.auth.signUp({
       email: regEmail,
       password: regPassword,
@@ -119,43 +158,44 @@ export default function AuthPage() {
           phone: phone,
         },
       },
-    })
-    setIsLoading(false)
+    });
+    setIsLoading(false);
 
     if (error) {
       if (error.message.toLowerCase().includes('already registered')) {
-        setMessage('⚠️ Ya existe una cuenta con este correo.')
+        setMessage('⚠️ Ya existe una cuenta con este correo.');
       } else {
-        setMessage('❌ Error al crear la cuenta: ' + error.message)
+        setMessage('❌ Error al crear la cuenta: ' + error.message);
       }
-      return
+      return;
     }
 
-    setPendingEmail(regEmail)
-    setCheckEmailMode(true)
+    // Pantalla "revisa tu correo"
+    setPendingEmail(regEmail);
+    setCheckEmailMode(true);
     setMessage(
       'Te enviamos un enlace para verificar tu cuenta. Abre tu correo y sigue las instrucciones.'
-    )
+    );
   }
 
   // Reenviar verificación
   async function handleResendVerification() {
-    setMessage(null)
+    setMessage(null);
     if (!pendingEmail) {
-      setMessage('Ingresa un correo para reenviar la verificación.')
-      return
+      setMessage('Ingresa un correo para reenviar la verificación.');
+      return;
     }
-    setIsLoading(true)
+    setIsLoading(true);
     const { error } = await supabase.auth.resend({
       type: 'signup',
       email: pendingEmail,
       options: { emailRedirectTo: authRedirect },
-    })
-    setIsLoading(false)
+    });
+    setIsLoading(false);
     if (error) {
-      setMessage('❌ No se pudo reenviar: ' + error.message)
+      setMessage('❌ No se pudo reenviar: ' + error.message);
     } else {
-      setMessage('📩 Te reenviamos el correo de verificación.')
+      setMessage('📩 Te reenviamos el correo de verificación.');
     }
   }
 
@@ -163,33 +203,35 @@ export default function AuthPage() {
   // LOGIN
   // -----------------------------
   async function handleLogin(e: React.FormEvent) {
-    e.preventDefault()
-    setMessage(null)
-    setIsLoading(true)
+    e.preventDefault();
+    setMessage(null);
+    setIsLoading(true);
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email: loginEmail,
       password: loginPassword,
-    })
+    });
 
-    setIsLoading(false)
+    setIsLoading(false);
 
     if (error) {
-      const msg = error.message?.toLowerCase() ?? ''
+      const msg = error.message?.toLowerCase() ?? '';
       if (msg.includes('email not confirmed') || msg.includes('not confirmed')) {
-        setMessage('⚠️ Debes verificar tu correo antes de iniciar sesión.')
-        setPendingEmail(loginEmail)
-        setCheckEmailMode(true)
+        setMessage('⚠️ Debes verificar tu correo antes de iniciar sesión.');
+        setPendingEmail(loginEmail);
+        setCheckEmailMode(true);
       } else {
-        setMessage('❌ Error al iniciar sesión: ' + error.message)
+        setMessage('❌ Error al iniciar sesión: ' + error.message);
       }
-      return
+      return;
     }
 
     if (data?.user) {
-      window.location.href = '/app'
+      // Sincroniza/crea profile desde metadata por si faltaba (cuentas antiguas)
+      await ensureProfileFromAuth();
+      window.location.href = '/app';
     } else {
-      setMessage('⚠️ Inicia sesión nuevamente.')
+      setMessage('⚠️ Inicia sesión nuevamente.');
     }
   }
 
@@ -197,23 +239,23 @@ export default function AuthPage() {
   // PEDIR CORREO PARA RESET
   // -----------------------------
   async function handleResetPasswordRequest(e: React.FormEvent) {
-    e.preventDefault()
-    setMessage(null)
-    setIsLoading(true)
+    e.preventDefault();
+    setMessage(null);
+    setIsLoading(true);
 
     const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
       redirectTo: authRedirect,
-    })
+    });
 
-    setIsLoading(false)
+    setIsLoading(false);
 
     if (error) {
-      setMessage('❌ Error al enviar el correo: ' + error.message)
+      setMessage('❌ Error al enviar el correo: ' + error.message);
     } else {
       setMessage(
         '📩 Te hemos enviado un enlace para restablecer tu contraseña. Revisa tu bandeja de entrada.'
-      )
-      setShowResetRequest(false)
+      );
+      setShowResetRequest(false);
     }
   }
 
@@ -221,30 +263,30 @@ export default function AuthPage() {
   // CAMBIAR CONTRASEÑA (después del correo)
   // -----------------------------
   async function handleChangePassword(e: React.FormEvent) {
-    e.preventDefault()
-    setMessage(null)
+    e.preventDefault();
+    setMessage(null);
 
     if (newPassword !== newPassword2) {
-      setMessage('⚠️ Las contraseñas no coinciden.')
-      return
+      setMessage('⚠️ Las contraseñas no coinciden.');
+      return;
     }
     if (newPassword.length < 8) {
-      setMessage('⚠️ La contraseña debe tener al menos 8 caracteres.')
-      return
+      setMessage('⚠️ La contraseña debe tener al menos 8 caracteres.');
+      return;
     }
 
-    setIsLoading(true)
+    setIsLoading(true);
     const { error } = await supabase.auth.updateUser({
       password: newPassword,
-    })
-    setIsLoading(false)
+    });
+    setIsLoading(false);
 
     if (error) {
-      setMessage('❌ No se pudo actualizar la contraseña: ' + error.message)
+      setMessage('❌ No se pudo actualizar la contraseña: ' + error.message);
     } else {
-      setMessage('✅ Tu contraseña fue actualizada. Ahora puedes iniciar sesión.')
-      setIsResetFlow(false)
-      setShowResetRequest(false)
+      setMessage('✅ Tu contraseña fue actualizada. Ahora puedes iniciar sesión.');
+      setIsResetFlow(false);
+      setShowResetRequest(false);
     }
   }
 
@@ -271,8 +313,8 @@ export default function AuthPage() {
 
           <button
             onClick={() => {
-              setCheckEmailMode(false)
-              setMessage(null)
+              setCheckEmailMode(false);
+              setMessage(null);
             }}
             className="w-full bg-slate-100 text-slate-700 py-2 rounded hover:bg-slate-200 text-sm"
           >
@@ -286,7 +328,7 @@ export default function AuthPage() {
           )}
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -324,9 +366,9 @@ export default function AuthPage() {
             <button
               type="button"
               onClick={() => {
-                setIsResetFlow(false)
-                setShowResetRequest(false)
-                setMessage(null)
+                setIsResetFlow(false);
+                setShowResetRequest(false);
+                setMessage(null);
               }}
               className="w-full bg-slate-100 text-slate-700 py-2 rounded hover:bg-slate-200 text-sm"
             >
@@ -459,5 +501,5 @@ export default function AuthPage() {
         )}
       </div>
     </div>
-  )
+  );
 }
