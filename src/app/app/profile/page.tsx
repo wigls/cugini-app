@@ -58,6 +58,17 @@ export default function ProfilePage() {
     ;(e.target as HTMLElement).releasePointerCapture?.(e.pointerId)
   }
 
+  // --- util: normalizar teléfono a formato +56 9XXXXXXXX
+  function normalizePhone(input: string) {
+    const digits = input.replace(/\D/g, '')
+    // intenta detectar si ya viene con 56
+    if (digits.startsWith('569') && digits.length >= 11) return `+${digits.slice(0, 11)}`
+    if (digits.length >= 9 && digits.startsWith('9')) return `+569${digits.slice(0, 8)}`
+    if (digits.length === 11 && digits.startsWith('569')) return `+${digits}`
+    // fallback: devuelve como +56 + resto si calza
+    return input.trim()
+  }
+
   async function exportAndUploadCropped() {
     if (!editorImgRef.current) return
     const img = editorImgRef.current
@@ -119,20 +130,23 @@ export default function ProfilePage() {
       if (!user) { setLoading(false); return }
       setEmail(user.email ?? '')
 
+      // Leer perfil desde DB
       const { data: prof } = await supabase
         .from('profiles')
         .select('full_name, phone, favorite_pizza, preferred_time, birthday, avatar_url')
         .eq('user_id', user.id)
         .maybeSingle()
 
-      if (prof) {
-        setFullName(prof.full_name ?? '')
-        setWhatsapp(prof.phone ?? '')
-        setFavoritePizza(prof.favorite_pizza ?? '')
-        setPreferredTime(prof.preferred_time ?? '')
-        setBirthday(prof.birthday ?? '')
-        setAvatarUrl(prof.avatar_url ?? null)
-      }
+      // Respaldo: metadata del auth si el perfil está vacío
+      const meta = (user.user_metadata ?? {}) as Record<string, any>
+
+      setFullName((prof?.full_name ?? meta.full_name ?? '') as string)
+      setWhatsapp((prof?.phone ?? meta.phone ?? '') as string)
+      setFavoritePizza((prof?.favorite_pizza ?? '') as string)
+      setPreferredTime((prof?.preferred_time ?? '') as string)
+      setBirthday((prof?.birthday ?? '') as string)
+      setAvatarUrl((prof?.avatar_url ?? null) as string | null)
+
       setLoading(false)
     })()
   }, [])
@@ -168,16 +182,19 @@ export default function ProfilePage() {
       const user = userRes?.user
       if (!user) throw new Error('No hay sesión activa.')
 
+      const normalizedPhone = normalizePhone(whatsapp.trim())
+
       const payload: any = {
         user_id: user.id,
         full_name: fullName.trim(),
-        phone: whatsapp.trim(),
+        phone: normalizedPhone,
         favorite_pizza: (favoritePizza || '').trim() || null,
         preferred_time: (preferredTime || '').trim() || null,
         birthday: birthday || null,
       }
       if (previewUrl) payload.avatar_url = previewUrl
 
+      // 1) Guardar en public.profiles
       const { error } = await supabase
         .from('profiles')
         .upsert(payload, { onConflict: 'user_id' })
@@ -187,11 +204,27 @@ export default function ProfilePage() {
       if (error) {
         console.error(error)
         setMsg('❌ Error al guardar. Revisa la consola.')
+        setSaving(false)
         return
       }
 
+      // 2) Sincronizar en auth.users.metadata (para que "Usuarios Cugini" vea los cambios)
+      const metaUpdate: Record<string, any> = {
+        full_name: payload.full_name || null,
+        phone: payload.phone || null,
+      }
+      if (previewUrl) metaUpdate.avatar_url = previewUrl
+
+      const { error: metaErr } = await supabase.auth.updateUser({ data: metaUpdate })
+      if (metaErr) {
+        console.warn('[auth.updateUser metadata]', metaErr.message)
+        // no detenemos, pero dejamos aviso suave al usuario
+        setMsg('✅ Cambios guardados. (Nota: el panel admin puede demorar en reflejar el nombre).')
+      } else {
+        setMsg('✅ Cambios guardados correctamente.')
+      }
+
       if (previewUrl) { setAvatarUrl(previewUrl); setPreviewUrl(null) }
-      setMsg('✅ Cambios guardados correctamente.')
     } catch (err) {
       console.error(err)
       setMsg('❌ Ocurrió un error guardando.')
@@ -209,9 +242,7 @@ export default function ProfilePage() {
   }
 
   /* =======================================================================
-     LAYOUT (ajuste solicitado)
-     - Usa el mismo contenedor del app: max-w-[540px], padding horizontal.
-     - La card ocupa TODO el ancho disponible de ese contenedor.
+     LAYOUT
      ======================================================================= */
   return (
     <div className="min-h-dvh bg-white">
