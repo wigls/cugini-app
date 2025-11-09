@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import PointsOvenCard from '../../components/PointsOvenCard'  // se mantiene tu ruta
 
 /* ========= Ajustes de la imagen decorativa ========= */
 const IMAGE_SRC = '/brand/repartidor.png'
@@ -225,26 +226,17 @@ export default function DashboardPage() {
             <p className="text-cugini-dark/70 text-sm">Bienvenido al programa de puntos Cugini.</p>
           </div>
 
-          {/* Saldo y progreso */}
-          <div className="mt-4 bg-cugini-green/10 border border-cugini-green/30 rounded-lg p-4">
-            <p className="text-cugini-dark/60 text-sm">Tus puntos Cugini</p>
-            <p className="text-4xl font-extrabold text-cugini-green">{points}</p>
-            <p className="text-xs text-cugini-dark/50 mt-1">
-              Acumulado histórico: <span className="font-semibold">{totalEarned}</span> pts
-            </p>
-
-            <div className="mt-4">
-              <div className="flex items-center justify-between text-xs text-cugini-dark/60 mb-1">
-                <span>
-                  Próxima recompensa a {progressData.goal} pts
-                  {USE_NET_FOR_GOALS ? ' (progreso según tu saldo actual)' : ' (progreso histórico)'}
-                </span>
-                <span className="font-semibold text-cugini-dark">{animatedPct}%</span>
-              </div>
-              <ProgressBar pct={animatedPct} />
-              <p className="text-xs text-cugini-dark/70 mt-2">
-                Te faltan <span className="font-semibold">{Math.max(0, progressData.remain)}</span> puntos para tu siguiente recompensa 🍕
-              </p>
+          {/* ===== Wrapper para centrar y limitar el ancho de la card del horno ===== */}
+          <div className="mt-2 flex justify-center">
+            <div className="w-full max-w-md">
+              <PointsOvenCard
+                email={email ?? ''}
+                points={points}
+                pct={animatedPct}
+                goal={progressData.goal}
+                remain={Math.max(0, progressData.remain)}
+                net={USE_NET_FOR_GOALS}
+              />
             </div>
           </div>
         </div>

@@ -1,11 +1,24 @@
-// ⛔️ No pongas 'use client' aquí
-export default function DebugEnv() {
+'use client'
+
+export default function DebugEnvPage() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
   return (
-    <pre style={{padding:16, background:'#111', color:'#0f0', overflow:'auto'}}>
-{`DEBUG ENV (solo para pruebas):
-NEXT_PUBLIC_SUPABASE_URL: ${process.env.NEXT_PUBLIC_SUPABASE_URL || '—'}
-NEXT_PUBLIC_SUPABASE_ANON_KEY: ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.slice(0,8) || '—'}... (oculto)
-`}
-    </pre>
+    <div
+      style={{
+        minHeight: '100vh',
+        padding: '2rem',
+        background: '#f5f5f5',
+        fontFamily: 'monospace',
+      }}
+    >
+      <h1>🔍 DEBUG ENV (solo para pruebas)</h1>
+      <p><strong>NEXT_PUBLIC_SUPABASE_URL:</strong> {url || '❌ no definida'}</p>
+      <p><strong>NEXT_PUBLIC_SUPABASE_ANON_KEY:</strong> {key ? '✅ existe' : '❌ no definida'}</p>
+      <p style={{ marginTop: '1rem', color: '#888' }}>
+        *Si alguno sale ❌, revisa tus variables en Vercel &gt; Settings &gt; Environment Variables.
+      </p>
+    </div>
   )
 }
