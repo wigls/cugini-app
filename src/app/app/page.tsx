@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import PointsOvenCard from '../../components/PointsOvenCard'  // se mantiene tu ruta
+import PointsOvenCard from '../../components/PointsOvenCard'
+import PizzaBackground from '../../components/PizzaBackground'
 
 /* ========= Ajustes de la imagen decorativa ========= */
 const IMAGE_SRC = '/brand/repartidor.png'
@@ -143,6 +144,14 @@ export default function DashboardPage() {
 
       setPoints(balanceQ.data?.balance ?? 0)
       setTxs(txQ.data || [])
+
+      // histórico para niveles (fallback a total_earned si existe en user_points)
+      const earnedFromTx = (txQ.data || []).reduce((acc: number, tx: any) => {
+        const raw = (tx.points ?? tx.change ?? 0)
+        return acc + Math.max(0, raw)
+      }, 0)
+      setTotalEarned(balanceQ.data?.total_earned ?? earnedFromTx)
+
       setLoading(false)
     }
     loadData()
@@ -199,22 +208,27 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-dvh bg-cugini-cream/60">
+      <div className="min-h-dvh bg-transparent">
         <div className="p-6">Cargando...</div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-dvh bg-cugini-cream/60">
-      {/* OJO: el contenedor del layout ya tiene max-w y padding; aquí solo mantenemos consistencia */}
-      <div className="w-full space-y-0">
+    <div className="min-h-dvh bg-transparent relative">
+      {/* Fondo global fijo (NO bloquea clics) */}
+      <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
+        <PizzaBackground />
+      </div>
+
+      {/* Contenido por encima del fondo */}
+      <div className="relative z-10 w-full space-y-0">
         {/* Tarjeta principal */}
-        <div className="relative bg-white rounded-xl shadow p-5 border border-cugini-dark/10">
-          {/* Chip de nivel fijo, sin romper la línea */}
+        <div className="relative rounded-2xl p-5 shadow-xl bg-white/70 backdrop-blur ring-1 ring-black/5">
+          {/* Chip de nivel */}
           <button
             onClick={() => setShowTierModal(true)}
-            className={`absolute right-3 top-3 px-2.5 py-1 rounded-full text-xs font-bold ${tierBadgeColor(tier.name)} hover:opacity-90 transition`}
+            className={`absolute right-3 top-3 px-2.5 py-1 rounded-full text-xs font-bold shadow-sm ring-1 ring-black/10 ${tierBadgeColor(tier.name)} hover:opacity-90 transition`}
           >
             {tier.name}
           </button>
@@ -226,7 +240,7 @@ export default function DashboardPage() {
             <p className="text-cugini-dark/70 text-sm">Bienvenido al programa de puntos Cugini.</p>
           </div>
 
-          {/* ===== Wrapper para centrar y limitar el ancho de la card del horno ===== */}
+          {/* Card del horno */}
           <div className="mt-2 flex justify-center">
             <div className="w-full max-w-md">
               <PointsOvenCard
@@ -264,7 +278,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Últimos movimientos */}
-        <div className="bg-white rounded-xl shadow border border-cugini-dark/10">
+        <div className="rounded-xl shadow bg-white/50 backdrop-blur-sm ring-1 ring-black/5">
           <div className="px-5 pt-5 pb-3">
             <h2 className="text-lg font-semibold text-cugini-dark">Últimos movimientos</h2>
           </div>
@@ -288,7 +302,10 @@ export default function DashboardPage() {
                   const isPositive = amount > 0
                   const isNegative = amount < 0
                   return (
-                    <li key={tx.id} className="flex justify-between items-center border rounded-lg px-3 py-2">
+                    <li
+                      key={tx.id}
+                      className="flex justify-between items-center rounded-lg px-3 py-2 ring-1 ring-black/5 bg-white/60 backdrop-blur-sm"
+                    >
                       <div className="min-w-0">
                         <p className="text-sm text-cugini-dark truncate">
                           {tx.reason ? tx.reason : t === 'EARN' ? 'Puntos ganados' : 'Movimiento'}
@@ -315,7 +332,7 @@ export default function DashboardPage() {
         </div>
 
         {/* === Avisos de Cugini === */}
-        <div className="bg-white rounded-xl shadow border border-cugini-dark/10 mt-6">
+        <div className="rounded-xl shadow bg-white/50 backdrop-blur-sm ring-1 ring-black/5 mt-6">
           <div className="px-5 pt-5 pb-3 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-cugini-dark">Avisos de Cugini</h2>
           </div>
@@ -330,7 +347,7 @@ export default function DashboardPage() {
             ) : (
               <ul className="space-y-3">
                 {ann.map(a => (
-                  <li key={a.id} className="border rounded-lg px-3 py-2">
+                  <li key={a.id} className="rounded-lg px-3 py-2 ring-1 ring-black/5 bg-white/60 backdrop-blur-sm">
                     <p className="text-sm font-semibold text-cugini-dark">
                       {a.title || 'Aviso'}
                     </p>
@@ -361,10 +378,16 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Modal de niveles */}
+      {/* Modal de niveles (restaurado) */}
       {showTierModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowTierModal(false)}>
-          <div className="bg-white w-full max-w-md mx-4 rounded-xl shadow-xl border border-cugini-dark/10 p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+          onClick={() => setShowTierModal(false)}
+        >
+          <div
+            className="bg-white w-full max-w-md mx-4 rounded-xl shadow-xl border border-cugini-dark/10 p-5 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-start justify-between">
               <h3 className="text-lg font-bold text-cugini-dark">Niveles Cugini</h3>
               <button onClick={() => setShowTierModal(false)} className="text-cugini-dark/60 hover:text-cugini-dark">✕</button>
@@ -398,8 +421,9 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Scrollbar sutil */}
+      {/* Scrollbar sutil + body transparente */}
       <style jsx global>{`
+        body { background: transparent !important; }
         .cugi-scroll { scrollbar-width: thin; scrollbar-color: #94a3b8 transparent; }
         .cugi-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
         .cugi-scroll::-webkit-scrollbar-thumb { background-color: #94a3b8; border-radius: 9999px; }
