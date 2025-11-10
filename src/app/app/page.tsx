@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import PointsOvenCard from '../../components/PointsOvenCard'
 import PizzaBackground from '../../components/PizzaBackground'
+import DeliveryMotion from '../../components/DeliveryMotion';
 
 /* ========= Ajustes de la imagen decorativa ========= */
 const IMAGE_SRC = '/brand/repartidor.png'
@@ -153,6 +154,84 @@ function Toast({ show, children }: { show: boolean; children: React.ReactNode })
     </div>
   )
 }
+/* ===== Sticker animado: humo + polvo + suspensión ===== */
+function RepartidorSticker({
+  src,
+  widthClass,
+  opacity = 1,
+  offsetY = 0,
+}: {
+  src: string
+  widthClass: string
+  opacity?: number
+  offsetY?: number
+}) {
+  return (
+    <div
+      className={`relative ${widthClass} select-none pointer-events-none`}
+      style={{ opacity, transform: `translateY(${offsetY}px)` }}
+      aria-hidden="true"
+    >
+      {/* Imagen PNG transparente (sticker) */}
+      <img
+        src={src}
+        alt=""
+        className="w-full h-auto drop-shadow-[0_10px_24px_rgba(0,0,0,0.22)]"
+        loading="lazy"
+        decoding="async"
+      />
+
+      {/* Sombra suave */}
+      <div className="absolute left-0 right-0 -bottom-[2%] mx-auto h-[10%] max-h-8 w-[70%] rounded-full bg-black/25 blur-[12px] opacity-55" />
+
+      {/* Polvo — rueda trasera */}
+      <div className="absolute bottom-[6%] left-[18%] -translate-x-1/2 w-[28%] h-[18%]">
+        <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 block size-[60%] rounded-full bg-[radial-gradient(closest-side,rgba(255,183,3,0.40),rgba(255,183,3,0)_70%)] animate-dust-pulse" />
+        <span className="absolute left-0 top-1/2 -translate-y-1/2 block w-[75%] h-[42%] rounded-full bg-[radial-gradient(closest-side,rgba(255,221,170,0.38),rgba(255,221,170,0)_70%)] animate-dust-drift" />
+      </div>
+
+      {/* Polvo — rueda delantera */}
+      <div className="absolute bottom-[6%] left-[72%] -translate-x-1/2 w-[28%] h-[18%]">
+        <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 block size-[60%] rounded-full bg-[radial-gradient(closest-side,rgba(255,183,3,0.40),rgba(255,183,3,0)_70%)] animate-dust-pulse delay-150" />
+        <span className="absolute left-0 top-1/2 -translate-y-1/2 block w-[75%] h-[42%] rounded-full bg-[radial-gradient(closest-side,rgba(255,221,170,0.38),rgba(255,221,170,0)_70%)] animate-dust-drift delay-150" />
+      </div>
+
+      {/* Humo del escape — más notorio */}
+      <div className="absolute bottom-[19%] left-[24%] w-[22%] h-[24%]">
+        <span className="absolute left-0 bottom-0 block size-[20%] rounded-full bg-white/65 blur-[1px] animate-smoke" />
+        <span className="absolute left-[10%] bottom-[12%] block size-[26%] rounded-full bg-white/55 blur-[1.5px] animate-smoke delay-150" />
+        <span className="absolute left-[22%] bottom-[18%] block size-[32%] rounded-full bg-white/45 blur-[2px] animate-smoke delay-300" />
+      </div>
+
+      {/* micro “rebote” de suspensión en las ruedas (oscila el polvo) */}
+      <style jsx>{`
+        @keyframes dustPulse {
+          0% { transform: scale(0.85); opacity: 0.0; }
+          20% { opacity: 0.55; }
+          60% { transform: scale(1.08); opacity: 0.35; }
+          100% { transform: scale(1.22); opacity: 0; }
+        }
+        @keyframes dustDrift {
+          0% { transform: translateX(0) translateY(0) scale(0.92); opacity: 0.0; }
+          15% { opacity: 0.40; }
+          60% { transform: translateX(14%) translateY(-1px) scale(1.04); }
+          100% { transform: translateX(22%) translateY(-2px) scale(1.08); opacity: 0; }
+        }
+        @keyframes smokeRise {
+          0% { transform: translate(0, 0) scale(0.8); opacity: 0.0; }
+          20% { opacity: 0.6; }
+          100% { transform: translate(18%, -34%) scale(1.22); opacity: 0; }
+        }
+        .animate-dust-pulse { animation: dustPulse 1.35s ease-out infinite; }
+        .animate-dust-drift { animation: dustDrift 1.6s ease-out infinite; }
+        .animate-smoke { animation: smokeRise 1.8s ease-out infinite; }
+        .delay-150 { animation-delay: .15s !important; }
+        .delay-300 { animation-delay: .3s !important; }
+      `}</style>
+    </div>
+  )
+}
+
 
 /* ================================ */
 export default function DashboardPage() {
@@ -362,27 +441,26 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* —— BLOQUE de imagen + frase —— */}
-        <div className="my-10 sm:my-14 lg:my-16">
-          <div className="flex justify-center py-4 pointer-events-none select-none">
-            <img
-              src={IMAGE_SRC}
-              alt=""
-              aria-hidden="true"
-              loading="lazy"
-              className={`mix-blend-multiply ${IMAGE_WIDTH_CLASS}`}
-              style={{ opacity: IMAGE_OPACITY, transform: `translateY(${IMAGE_OFFSET_Y}px)` }}
-            />
-          </div>
-          <div className="text-center" aria-live="polite">
-            <span
-              key={quoteIndex}
-              className={`inline-block text-sm sm:text-base text-cugini-dark/80 transition-opacity duration-500 ${fadeIn ? 'opacity-100' : 'opacity-0'}`}
-            >
-              {QUOTES[quoteIndex]}
-            </span>
-          </div>
-        </div>
+       
+{/* —— BLOQUE de imagen + frase (sticker animado) —— */}
+<div className="my-10 sm:my-14 lg:my-16">
+  <div className="flex justify-center py-4">
+    <RepartidorSticker
+      src={IMAGE_SRC}                  // asegúrate que este PNG ya es transparente
+      widthClass={IMAGE_WIDTH_CLASS}   // mantiene tu responsivo
+      opacity={0.95}                   // un pelín más presente
+      offsetY={IMAGE_OFFSET_Y}
+    />
+  </div>
+  <div className="text-center" aria-live="polite">
+    <span
+      key={quoteIndex}
+      className={`inline-block text-sm sm:text-base text-cugini-dark/80 transition-opacity duration-500 ${fadeIn ? 'opacity-100' : 'opacity-0'}`}
+    >
+      {QUOTES[quoteIndex]}
+    </span>
+  </div>
+</div>
 
         {/* Últimos movimientos (visual cálido y diferenciado) */}
         <div className="rounded-3xl shadow-lg shadow-amber-900/10 bg-white/55 backdrop-blur-sm ring-1 ring-black/5">
