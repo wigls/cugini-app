@@ -133,27 +133,75 @@ function OvenGauge({ pct }: { pct: number }) {
 
         {/* Boca interior */}
         <path d={archInner} fill="none" stroke="url(#innerMouth)" strokeWidth="30"/>
-
         {/* Fogata que llena la base */}
-        <g mask="url(#mouthMask)">
-          <ellipse cx={cx} cy={cy+6} rx="90" ry="95" fill="rgba(255,199,44,0.28)" />
-          <g style={{ transformOrigin: `${cx}px ${cy}px`, animation: 'flameBreath 1.9s ease-in-out infinite' }}>
-            <path d={`M${cx} ${cy+8} C${cx-18} ${cy-18},${cx+22} ${cy-28},${cx+8} ${cy-56} C${cx+32} ${cy-38},${cx+42} ${cy-12},${cx+38} ${cy+8} Z`} fill="#FF8C1A" opacity=".95"/>
-            <path d={`M${cx-28} ${cy+10} C${cx-38} ${cy-12},${cx-12} ${cy-22},${cx-16} ${cy-42} C${cx} ${cy-30},${cx+10} ${cy-10},${cx+8} ${cy+10} Z`} fill="#FFA733" opacity=".9"/>
-            <path d={`M${cx+26} ${cy+10} C${cx+22} ${cy-10},${cx+40} ${cy-18},${cx+36} ${cy-36} C${cx+46} ${cy-24},${cx+54} ${cy-8},${cx+50} ${cy+10} Z`} fill="#FFD166" opacity=".95"/>
-          </g>
-          {Array.from({ length: 8 }).map((_, i) => {
-            const x = cx - 40 + i * 12
-            const d = `${0.18 * i}s`
-            return <circle key={`ins-${i}`} cx={x} cy={cy+6} r="4" fill="#FFC72C" style={{ animation: `sparkFloat 1.6s ${d} linear infinite` }} />
-          })}
-        </g>
+<g mask="url(#mouthMask)">
+  {/* Resplandor más intenso */}
+  <ellipse cx={cx} cy={cy + 4} rx="95" ry="100" fill="rgba(255,80,0,0.35)" />
+  <ellipse cx={cx} cy={cy + 8} rx="88" ry="92" fill="rgba(255,130,20,0.28)" />
 
-        {/* Lenguas de fuego exteriores */}
-        <g style={{ animation: 'tongues 2.2s ease-in-out infinite' }}>
-          <path d={`M${cx-90} ${cy+6} C${cx-102} ${cy-6},${cx-82} ${cy-12},${cx-86} ${cy-28} C${cx-76} ${cy-18},${cx-70} ${cy-6},${cx-72} ${cy+10} Z`} fill="rgba(255,140,26,.65)"/>
-          <path d={`M${cx+94} ${cy+6} C${cx+84} ${cy-10},${cx+104} ${cy-10},${cx+98} ${cy-28} C${cx+110} ${cy-18},${cx+116} ${cy-4},${cx+112} ${cy+12} Z`} fill="rgba(255,199,44,.55)"/>
-        </g>
+  {/* Núcleo principal de flama */}
+  <g style={{ transformOrigin: `${cx}px ${cy}px`, animation: 'flameBreath 2.2s ease-in-out infinite' }}>
+    {/* Capas rojas profundas */}
+    <path
+      d={`M${cx} ${cy + 10} C${cx - 20} ${cy - 20},${cx + 24} ${cy - 30},${cx + 6} ${cy - 64}
+          C${cx + 36} ${cy - 44},${cx + 48} ${cy - 10},${cx + 40} ${cy + 8} Z`}
+      fill="#D42E1F"
+      opacity=".95"
+    />
+    <path
+      d={`M${cx - 26} ${cy + 8} C${cx - 38} ${cy - 20},${cx - 10} ${cy - 32},${cx - 12} ${cy - 52}
+          C${cx + 8} ${cy - 38},${cx + 14} ${cy - 12},${cx + 8} ${cy + 8} Z`}
+      fill="#FF5317"
+      opacity=".92"
+    />
+    <path
+      d={`M${cx + 24} ${cy + 8} C${cx + 20} ${cy - 10},${cx + 42} ${cy - 16},${cx + 36} ${cy - 40}
+          C${cx + 48} ${cy - 26},${cx + 58} ${cy - 4},${cx + 52} ${cy + 10} Z`}
+      fill="#FF8C1A"
+      opacity=".95"
+    />
+    {/* Flamas más pequeñas al centro */}
+    <path
+      d={`M${cx} ${cy + 6} C${cx - 6} ${cy - 26},${cx + 6} ${cy - 28},${cx} ${cy - 56} Z`}
+      fill="#FFD166"
+      opacity=".9"
+    />
+  </g>
+
+  {/* Lenguas laterales adicionales */}
+  <g style={{ animation: 'tongues 2.4s ease-in-out infinite' }}>
+    {Array.from({ length: 6 }).map((_, i) => {
+      const offset = (i - 3) * 16
+      const color = i % 2 === 0 ? 'rgba(255,80,0,0.5)' : 'rgba(255,199,44,0.45)'
+      return (
+        <path
+          key={`tongue-${i}`}
+          d={`M${cx + offset} ${cy + 10}
+              C${cx + offset - 4} ${cy - 4},${cx + offset + 6} ${cy - 14},${cx + offset + 2} ${cy - 26}
+              C${cx + offset + 10} ${cy - 18},${cx + offset + 14} ${cy - 6},${cx + offset + 12} ${cy + 8} Z`}
+          fill={color}
+        />
+      )
+    })}
+  </g>
+
+  {/* Chispas flotantes más vivas */}
+  {Array.from({ length: 10 }).map((_, i) => {
+    const x = cx - 45 + i * 10
+    const delay = `${0.12 * i}s`
+    const hue = i % 2 === 0 ? '#FFD166' : '#FF9B42'
+    return (
+      <circle
+        key={`spark-${i}`}
+        cx={x}
+        cy={cy + 8}
+        r="3.5"
+        fill={hue}
+        style={{ animation: `sparkFloat 1.8s ${delay} linear infinite` }}
+      />
+    )
+  })}
+</g>
 
         {/* % centrado (blanco con sombra) */}
         <text x={cx} y={cy-28} textAnchor="middle" fontSize="30" fontWeight={900} fill="rgba(0,0,0,.35)">{safe}%</text>

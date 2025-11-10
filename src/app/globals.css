@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import "tailwindcss"; 
 
 /* 🎨 Paleta Cugini */
 :root {
@@ -35,7 +35,6 @@ html, body {
   font-weight: 400;
   line-height: 1.6;
   transition: background 0.3s ease, color 0.3s ease;
-
 }
 
 /* 💚 Detalles Cugini comunes */
@@ -69,4 +68,27 @@ h1, h2, h3, h4 {
 /* 🧩 Fondo de la app (por si algún contenedor no usa Tailwind) */
 .app-bg {
   background-color: var(--cugini-cream);
+}
+
+/* ========================================================= */
+/* ✨ EFECTOS ESPECIALES CUGINI: Glow animado por nivel */
+/* ========================================================= */
+
+@keyframes tier-glow {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.25); }
+}
+
+/* Variantes suaves por color */
+.animate-tier-bronze {
+  animation: tier-glow 3.6s ease-in-out infinite;
+}
+.animate-tier-silver {
+  animation: tier-glow 4s ease-in-out infinite;
+}
+.animate-tier-gold {
+  animation: tier-glow 3.2s ease-in-out infinite;
+}
+.animate-tier-diamond {
+  animation: tier-glow 3s ease-in-out infinite;
 }

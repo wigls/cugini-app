@@ -1,9 +1,11 @@
+// src/app/app/ClientDashboardPage.tsx
 'use client'
 
 import { useEffect, useMemo, useState, useRef } from 'react'
-import { supabase } from '../../lib/supabase'
-import PointsOvenCard from '../../components/PointsOvenCard'
+import { supabase } from '../../lib/supabase'           // 👈 desde /app/app a /lib = ../../
+import PointsOvenCard from '../../components/PointsOvenCard' // 👈 ../../
 import PizzaBackground from '../../components/PizzaBackground'
+import clsx from 'clsx';
 
 /* ========= Ajustes de la imagen decorativa ========= */
 const IMAGE_SRC = '/brand/repartidor.png'
@@ -155,7 +157,7 @@ function Toast({ show, children }: { show: boolean; children: React.ReactNode })
 }
 
 /* ================================ */
-export default function DashboardPage() {
+export default function ClientDashboardPage() {
   const [email, setEmail] = useState<string | null>(null)
   const [points, setPoints] = useState<number>(0)
   const [loading, setLoading] = useState(true)
@@ -262,7 +264,6 @@ export default function DashboardPage() {
   const prevFirstTxId = useRef<number | null>(null)
   const prevPctRef = useRef<number>(0)
 
-  // Celebración por NUEVO movimiento positivo
   useEffect(() => {
     if (!txs || txs.length === 0) return
     const first = txs[0]
@@ -283,7 +284,6 @@ export default function DashboardPage() {
     }
   }, [txs])
 
-  // Celebración por ALCANZAR meta (remain <= 0)
   useEffect(() => {
     const prev = prevPctRef.current
     const now = progressData.pct
@@ -307,23 +307,30 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-dvh bg-transparent relative">
-      {/* Overlays de refuerzo positivo */}
+      {/* Overlays */}
       <CelebrationOverlay show={showCelebrate} />
       <Toast show={!!toastMsg}>{toastMsg}</Toast>
 
-      {/* Fondo global fijo (NO bloquea clics) */}
+      {/* Fondo */}
       <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
         <PizzaBackground />
       </div>
 
-      {/* Contenido por encima del fondo */}
+      {/* Contenido */}
       <div className="relative z-10 w-full space-y-0">
-        {/* Tarjeta principal (squircle + sombra cálida) */}
         <div className="relative rounded-3xl p-5 shadow-xl shadow-amber-900/10 bg-white/70 backdrop-blur ring-1 ring-black/5">
-          {/* Chip de nivel estilo medalla */}
           <button
             onClick={() => setShowTierModal(true)}
-            className={`absolute right-3 top-3 px-2.5 py-1 rounded-full text-[11px] uppercase tracking-wide font-extrabold shadow ring-1 ring-black/10 ${tierBadgeColor(tier.name)} hover:opacity-95 transition`}
+            className={clsx(
+              'absolute right-3 top-3 px-3 py-1.5 text-[11px] uppercase tracking-wider font-extrabold rounded-full ring-1 ring-black/10 transition-all duration-300 ease-out',
+              'hover:scale-[1.05] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-amber-400/50',
+              {
+                'bg-gradient-to-r from-[#A0522D] to-[#D2691E] text-white shadow-[0_0_10px_#C76A1F80] animate-tier-bronze': tier.name === 'Bronce',
+                'bg-gradient-to-r from-[#B0C4DE] to-[#D9D9D9] text-cugini-dark shadow-[0_0_12px_#C8D0E080] animate-tier-silver': tier.name === 'Plata',
+                'bg-gradient-to-r from-[#FFD700] to-[#FFB703] text-cugini-dark shadow-[0_0_12px_#FFD70080] animate-tier-gold': tier.name === 'Oro',
+                'bg-gradient-to-r from-[#74EBD5] to-[#ACB6E5] text-cugini-dark shadow-[0_0_16px_#74EBD580] animate-tier-diamond': tier.name === 'Diamante',
+              }
+            )}
           >
             {tier.name}
           </button>
@@ -335,7 +342,6 @@ export default function DashboardPage() {
             <p className="text-cugini-dark/70 text-sm">Bienvenido al programa de puntos Cugini.</p>
           </div>
 
-          {/* Card del horno */}
           <div className="mt-2 flex justify-center">
             <div className="w-full max-w-md">
               <PointsOvenCard
@@ -349,7 +355,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Progreso textual + barra (refuerzo visual adicional) */}
           <div className="mt-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium text-cugini-dark">Progreso hacia {progressData.goal} pts</span>
@@ -362,7 +367,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* —— BLOQUE de imagen + frase —— */}
+        {/* —— imagen + frase —— */}
         <div className="my-10 sm:my-14 lg:my-16">
           <div className="flex justify-center py-4 pointer-events-none select-none">
             <img
@@ -384,7 +389,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Últimos movimientos (visual cálido y diferenciado) */}
+        {/* movimientos */}
         <div className="rounded-3xl shadow-lg shadow-amber-900/10 bg-white/55 backdrop-blur-sm ring-1 ring-black/5">
           <div className="px-5 pt-5 pb-3">
             <h2 className="text-lg font-semibold text-cugini-dark">Últimos movimientos</h2>
@@ -449,7 +454,7 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* === Avisos de Cugini === */}
+        {/* avisos */}
         <div className="rounded-3xl shadow-lg shadow-amber-900/10 bg-white/55 backdrop-blur-sm ring-1 ring-black/5 mt-6">
           <div className="px-5 pt-5 pb-3 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-cugini-dark">Avisos de Cugini</h2>
@@ -499,120 +504,107 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Modal de niveles (restaurado) */}
-      {/* Modal de niveles (rediseño visual, sin cambiar lógica) */}
-{showTierModal && (
-  <div
-    className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
-    onClick={() => setShowTierModal(false)}
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="niveles-title"
-  >
-    <div
-      className="bg-white w-full max-w-md mx-4 rounded-2xl shadow-xl border border-cugini-dark/10 overflow-hidden"
-      onClick={(e) => e.stopPropagation()}
-    >
-      {/* Header con degradado cálido */}
-      <div className="px-5 py-4 bg-gradient-to-r from-[#FFF3E0] via-white to-[#FFE8CC] border-b border-black/5">
-        <div className="flex items-start justify-between">
-          <div>
-            <h3 id="niveles-title" className="text-lg font-extrabold text-cugini-dark tracking-tight">
-              Niveles Cugini
-            </h3>
-            <p className="mt-0.5 text-xs text-cugini-dark/70">
-              Progresas según tus puntos acumulados históricos.
-            </p>
-          </div>
-          <button
-            onClick={() => setShowTierModal(false)}
-            aria-label="Cerrar"
-            className="rounded-full p-1.5 text-cugini-dark/70 hover:text-cugini-dark hover:bg-black/5 transition"
+      {/* Modal de niveles */}
+      {showTierModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="niveles-title"
+          onClick={() => setShowTierModal(false)}
+        >
+          <div
+            className={`relative w-full max-w-md mx-4 rounded-3xl shadow-2xl ring-1 ring-black/10 bg-gradient-to-b from-[#FFF8F2] via-white to-[#FFF3E0]`}
+            onClick={(e) => e.stopPropagation()}
           >
-            ✕
-          </button>
-        </div>
-      </div>
-
-      {/* Lista de niveles mejorada visualmente */}
-      <div className="px-5 py-4">
-        <ul className="space-y-2.5">
-          {TIERS.map((t) => {
-            const isCurrent = t.name === resolveTier(totalEarned).name
-
-            // Badge por nivel (degradados suaves y legibles)
-            const badgeClass =
-              t.name === 'Bronce'
-                ? 'bg-gradient-to-r from-[#8B4513] to-[#CD7F32] text-white shadow-[0_0_8px_#CD7F32A0]'
-                : t.name === 'Plata'
-                ? 'bg-gradient-to-r from-[#B0C4DE] to-[#E0E0E0] text-cugini-dark shadow-[0_0_8px_#E0E0E0A0]'
-                : t.name === 'Oro'
-                ? 'bg-gradient-to-r from-[#FFD700] to-[#FFB703] text-cugini-dark shadow-[0_0_10px_#FFD700A0]'
-                : t.name === 'Diamante'
-                ? 'bg-gradient-to-r from-[#74EBD5] to-[#ACB6E5] text-cugini-dark shadow-[0_0_12px_#74EBD5A0]'
-                : 'bg-amber-600 text-white'
-
-            return (
-              <li
-                key={t.name}
-                className={
-                  (isCurrent
-                    ? 'bg-white shadow-md ring-1 ring-amber-200 '
-                    : 'bg-white/70 ring-1 ring-black/5 ') +
-                  'rounded-2xl transition-shadow'
-                }
+            <div className="flex items-start justify-between px-5 pt-5">
+              <div>
+                <h3 id="niveles-title" className="text-lg font-extrabold text-cugini-dark tracking-tight">
+                  Niveles Cugini
+                </h3>
+                <p className="mt-0.5 text-xs text-cugini-dark/70">
+                  Progresas según tus puntos acumulados históricos.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowTierModal(false)}
+                aria-label="Cerrar"
+                className="rounded-full p-1.5 text-cugini-dark/70 hover:text-cugini-dark hover:bg-black/5 transition"
               >
-                <div className="flex items-center justify-between gap-3 px-3 py-2.5">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className={'shrink-0 px-2.5 py-1 rounded-full text-[11px] uppercase tracking-wider font-extrabold ' + badgeClass}>
-                      {t.name}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-sm text-cugini-dark truncate">desde {t.min} pts</p>
-                      {isCurrent && (
-                        <p className="text-[11px] text-cugini-dark/60">
-                          Tu nivel actual
-                        </p>
+                ✕
+              </button>
+            </div>
+
+            <div className="px-5 pb-5 pt-3">
+              <ul className="space-y-2.5">
+                {TIERS.map((t) => {
+                  const isCurrent = t.name === resolveTier(totalEarned).name
+                  return (
+                    <li
+                      key={t.name}
+                      className={clsx(
+                        'flex items-center justify-between rounded-2xl px-3 py-2.5 border ring-1 ring-black/5 transition-shadow',
+                        isCurrent
+                          ? 'bg-white/85 border-amber-300 shadow-lg shadow-amber-900/10'
+                          : 'bg-white/65 border-cugini-dark/10'
                       )}
-                    </div>
-                  </div>
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span
+                          className={clsx(
+                            'shrink-0 px-2.5 py-1 rounded-full text-[11px] uppercase tracking-wider font-extrabold',
+                            t.name === 'Bronce'   && 'bg-gradient-to-r from-[#A0522D] to-[#D2691E] text-white animate-tier-bronze',
+                            t.name === 'Plata'    && 'bg-gradient-to-r from-[#B0C4DE] to-[#D9D9D9] text-cugini-dark animate-tier-silver',
+                            t.name === 'Oro'      && 'bg-gradient-to-r from-[#FFD700] to-[#FFB703] text-cugini-dark animate-tier-gold',
+                            t.name === 'Diamante' && 'bg-gradient-to-r from-[#74EBD5] to-[#ACB6E5] text-cugini-dark animate-tier-diamond'
+                          )}
+                        >
+                          {t.name}
+                        </span>
 
-                  {isCurrent ? (
-                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-cugini-dark">
-                      <span aria-hidden>🏅</span> Activo
-                    </span>
-                  ) : (
-                    <span className="text-[11px] text-cugini-dark/50">Objetivo</span>
-                  )}
-                </div>
-              </li>
-            )
-          })}
-        </ul>
+                        <div className="min-w-0">
+                          <p className="text-sm text-cugini-dark truncate">desde {t.min} pts</p>
+                          {isCurrent && (
+                            <p className="text-[11px] text-cugini-dark/60">
+                              Estás en <span className="font-semibold">{t.name}</span>
+                            </p>
+                          )}
+                        </div>
+                      </div>
 
-        {/* Nota / ayuda */}
-        <div className="mt-3 rounded-xl bg-white/70 ring-1 ring-black/5 px-3 py-2">
-          <p className="text-[11px] leading-relaxed text-cugini-dark/70">
-            Estos umbrales son referenciales mientras definimos el modelo final. El nivel puede cambiar cuando acumules más puntos 🎯.
-          </p>
+                      {isCurrent ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-cugini-dark">
+                          <span aria-hidden>🏅</span> Tu nivel
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-cugini-dark/50">Objetivo</span>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+
+              <div className="mt-3 rounded-xl bg-white/70 ring-1 ring-black/5 px-3 py-2">
+                <p className="text-[11px] leading-relaxed text-cugini-dark/70">
+                  Estos umbrales son referenciales mientras definimos el modelo final. <br />
+                  El nivel puede cambiar cuando acumules más puntos 🎯.
+                </p>
+              </div>
+
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={() => setShowTierModal(false)}
+                  className="px-3.5 py-1.5 rounded-full bg-gradient-to-r from-[#E63946] to-[#FFB703]
+                             text-white text-sm font-semibold shadow-md shadow-amber-700/20 hover:opacity-95 transition"
+                >
+                  Listo
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
+      )}
 
-        {/* Footer */}
-        <div className="mt-4 flex justify-end">
-          <button
-            onClick={() => setShowTierModal(false)}
-            className="px-3.5 py-1.5 rounded-full bg-gradient-to-r from-[#E63946] to-[#FFB703] text-white text-sm font-semibold shadow-md shadow-amber-700/20 hover:opacity-95 transition"
-          >
-            Listo
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-)}
-
-
-      {/* Scrollbar sutil + body transparente */}
       <style jsx global>{`
         body { background: transparent !important; }
         .cugi-scroll { scrollbar-width: thin; scrollbar-color: #94a3b8 transparent; }

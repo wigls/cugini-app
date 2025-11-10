@@ -9,7 +9,7 @@ import { supabase } from '../lib/supabase'; // ajusta si usas alias @
 
 type Tab = { href: string; label: string };
 
-// ✅ Lista blanca de correos admin (puedes poner varios)
+// ✅ Correos con permisos de administrador
 const ADMIN_EMAILS = [
   'diego.inzunza1601@alumnos.ubiobio.cl',
   'admin2@tu-dominio.cl',
@@ -17,8 +17,9 @@ const ADMIN_EMAILS = [
 
 export function NavTabs() {
   const pathname = usePathname() ?? '';
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null); // null = cargando
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
 
+  // === Verificación de admin (idéntica lógica, solo UI cambiada) ===
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -26,21 +27,16 @@ export function NavTabs() {
         const { data } = await supabase.auth.getUser();
         const user = data?.user;
         if (!alive) return;
-
-        if (!user) { setIsAdmin(false); return; }
+        if (!user) return setIsAdmin(false);
 
         const email = (user.email || '').toLowerCase().trim();
-        const allowList = ADMIN_EMAILS.map(s => s.toLowerCase().trim()).includes(email);
+        const allowList = ADMIN_EMAILS.map(e => e.toLowerCase().trim()).includes(email);
         const metaIsAdmin =
           Boolean(user.user_metadata?.is_admin) ||
           user.user_metadata?.role === 'admin';
 
-        if (allowList || metaIsAdmin) {
-          setIsAdmin(true);
-          return;
-        }
+        if (allowList || metaIsAdmin) return setIsAdmin(true);
 
-        // Plan B: mirar profiles.is_admin
         const { data: profile } = await supabase
           .from('profiles')
           .select('is_admin')
@@ -52,40 +48,32 @@ export function NavTabs() {
         setIsAdmin(false);
       }
     })();
-
     return () => { alive = false; };
   }, []);
 
-  // --- Tabs base (DISEÑO BONITO: los 3 primeros llenan ancho, resto scrollea) ---
+  // === Tabs ===
   const baseTabs: Tab[] = [
     { href: '/app',        label: 'Mis puntos' },
     { href: '/app/claim',  label: 'Reclamar código' },
     { href: '/app/redeem', label: 'Canjea tus puntos' },
     { href: '/app/profile',label: 'Mi perfil' },
   ];
-
-  // 🔹 Ruta correcta de admin
   const adminTab: Tab = { href: '/admin', label: 'Admin' };
-
-  // mientras isAdmin === null mostramos baseTabs; cuando sea true, agregamos Admin
   const tabs: Tab[] = isAdmin ? [...baseTabs, adminTab] : baseTabs;
 
-  // activo: exacto en /app; para el resto acepta subrutas
-  const isActive = (href: string) => {
-    if (href === '/app') return pathname === '/app';
-    return pathname === href || pathname.startsWith(href + '/');
-  };
+  const isActive = (href: string) =>
+    href === '/app' ? pathname === '/app' : pathname.startsWith(href);
 
   return (
-    <nav className="sticky top-12 z-50 bg-white">
-      {/* contenedor que scrollea SOLO en X */}
+    <nav
+      className="sticky top-12 z-50 bg-gradient-to-r from-[#fff8f5] via-[#fff5ef] to-[#fff8f5] backdrop-blur-md shadow-[0_2px_8px_rgba(0,0,0,0.04)]"
+    >
+      {/* Scroll horizontal sutil */}
       <div className="no-scrollbar overflow-x-auto w-full">
-        {/* fila sin wrap, misma altura, gap bonito */}
-        <div className="flex flex-nowrap items-center h-11 gap-2 px-2">
+        <div className="flex flex-nowrap items-center h-12 gap-2 px-2">
           {tabs.map((t, i) => {
             const active = isActive(t.href);
-            // Los 3 primeros llenan la pantalla (1/3 cada uno) y NO se encogen;
-            // los demás quedan después y se ven con scroll horizontal.
+            // Los 3 primeros llenan ancho; el resto scrollea
             const widthClass = i < 3 ? 'basis-1/3 flex-shrink-0' : 'flex-shrink-0';
             return (
               <Link
@@ -94,19 +82,26 @@ export function NavTabs() {
                 aria-current={active ? 'page' : undefined}
                 className={clsx(
                   widthClass,
-                  'min-w-0 text-center px-3 py-1.5 rounded-full text-sm',
+                  'min-w-0 relative text-center px-3 py-1.5 text-sm font-medium transition-all duration-300 ease-out',
+                  'rounded-full border border-transparent select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#FFB703]/60',
+                  'active:scale-[0.98]',
                   active
-                    ? 'bg-green-100 text-green-800 font-semibold'
-                    : 'text-slate-700 hover:bg-slate-100'
+                    ? 'bg-gradient-to-r from-[#E63946] to-[#FFB703] text-white font-semibold shadow-md shadow-amber-700/20 animate-cugi-pop'
+                    : 'text-slate-700 hover:bg-[#FFE5D0]/80 hover:text-[#D12B2B] hover:shadow-sm hover:shadow-amber-900/10'
                 )}
               >
                 <span className="block truncate">{t.label}</span>
+
+                {/* Efecto brillante en activo */}
+                {active && (
+                  <span className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-r from-[#fff5e4]/20 to-[#fff5e4]/5 blur-sm" />
+                )}
               </Link>
             );
           })}
         </div>
       </div>
-      <div className="border-b" />
+      <div className="border-t border-[#FFD6A5]/40" />
     </nav>
   );
 }
