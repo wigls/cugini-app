@@ -24,8 +24,6 @@ export default function ClaimPage() {
     setMessage(null)
     setVariant('neutral')
 
-    // Usa EXACTAMENTE la misma normalización que te funcionaba
-    // (solo trim, sin upper ni limpieza agresiva)
     const cleanCode = code.trim()
 
     try {
@@ -40,7 +38,6 @@ export default function ClaimPage() {
         return
       }
 
-      // Backend previo devolvía: 'OK', 'INVALID_CODE'/'INVALIDO_O_VENCIDO', 'NO_AUTH', etc.
       if (data === 'OK') {
         setVariant('success')
         setMessage('✅ Código reclamado. Ya tienes tus puntos.')
@@ -60,9 +57,12 @@ export default function ClaimPage() {
         return
       }
 
-      // fallback por si devuelve otro texto
       setVariant('warn')
-      setMessage(`⚠️ Respuesta del servidor: ${String(data ?? '').trim() || 'Desconocida'}`)
+      setMessage(
+        `⚠️ Respuesta del servidor: ${
+          String(data ?? '').trim() || 'Desconocida'
+        }`
+      )
     } catch (err) {
       console.error('handleSubmit fatal:', err)
       setVariant('error')
@@ -81,6 +81,10 @@ export default function ClaimPage() {
       ? 'bg-yellow-50 border border-yellow-200 text-yellow-800'
       : 'bg-slate-50 border border-slate-200 text-slate-600'
 
+  // 🔹 Animaciones visuales según estado
+  const inputAnimClass = variant === 'error' ? 'cgi-shake' : ''
+  const alertAnimClass = variant === 'success' ? 'cgi-breathe' : ''
+
   return (
     <div className="min-h-screen bg-white px-4 py-8">
       <div className="max-w-2xl mx-auto space-y-6">
@@ -88,11 +92,16 @@ export default function ClaimPage() {
         <div className="rounded-2xl bg-white/95 backdrop-blur shadow-[0_6px_30px_rgba(0,0,0,0.08)] overflow-hidden">
           <div className="px-5 pt-5 pb-3">
             <div className="flex items-center gap-3">
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-green-100">🎟️</span>
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-green-100">
+                🎟️
+              </span>
               <div>
-                <h1 className="text-lg font-extrabold text-cugini-dark">Reclamar código</h1>
+                <h1 className="text-lg font-extrabold text-cugini-dark">
+                  Reclamar código
+                </h1>
                 <p className="text-sm text-cugini-dark/70">
-                  Ingresa el código que viene en tu caja Cugini para sumar puntos.
+                  Ingresa el código que viene en tu caja Cugini para sumar
+                  puntos.
                 </p>
               </div>
             </div>
@@ -101,30 +110,36 @@ export default function ClaimPage() {
           <div className="h-px bg-slate-100" />
 
           <form onSubmit={handleSubmit} className="px-5 pt-5 pb-6">
-            <label className="text-sm text-cugini-dark/70 block mb-1">Código de tu caja</label>
+            <label className="text-sm text-cugini-dark/70 block mb-1">
+              Código de tu caja
+            </label>
             <input
               value={code}
               onChange={(e) => setCode(e.target.value)}
               placeholder="ej: CUGINI-1234"
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-cugini-green/40"
+              className={`w-full rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-cugini-green/40 ${inputAnimClass}`}
             />
 
             <div className="mt-3">
               <button
                 type="submit"
                 disabled={!canSubmit}
-                className={`w-full sm:w-auto px-6 py-2 rounded-full font-semibold text-white shadow hover:shadow-md transition disabled:opacity-60 ${
-                  canSubmit ? '' : ''
-                }`}
+                className={`w-full sm:w-auto px-6 py-2 rounded-full font-semibold text-white shadow hover:shadow-md transition disabled:opacity-60`}
                 style={{ background: '#1C6B3C' }}
-                title={canSubmit ? 'Reclamar código' : 'Escribe un código válido'}
+                title={
+                  canSubmit
+                    ? 'Reclamar código'
+                    : 'Escribe un código válido para continuar'
+                }
               >
                 {loading ? 'Reclamando…' : 'Reclamar código'}
               </button>
             </div>
 
             {message && (
-              <p className={`text-sm mt-3 rounded px-3 py-2 ${alertClass}`}>
+              <p
+                className={`text-sm mt-3 rounded px-3 py-2 ${alertClass} ${alertAnimClass}`}
+              >
                 {message}
               </p>
             )}
@@ -139,12 +154,16 @@ export default function ClaimPage() {
         <div className="rounded-2xl bg-white/95 backdrop-blur shadow-[0_6px_30px_rgba(0,0,0,0.08)] px-5 py-5">
           <div className="flex items-center gap-2 mb-3">
             <span>⏰</span>
-            <h2 className="text-base font-bold text-cugini-dark">Horario de atención</h2>
+            <h2 className="text-base font-bold text-cugini-dark">
+              Horario de atención
+            </h2>
           </div>
 
           <div className="rounded-lg border border-slate-200 p-3 flex items-center justify-between">
             <span className="text-cugini-dark/80">Miércoles a Domingo</span>
-            <span className="font-semibold text-cugini-dark">18:00 – 23:00 hrs</span>
+            <span className="font-semibold text-cugini-dark">
+              18:00 – 23:00 hrs
+            </span>
           </div>
         </div>
 
@@ -162,11 +181,15 @@ export default function ClaimPage() {
         <div className="rounded-2xl bg-white/95 backdrop-blur shadow-[0_6px_30px_rgba(0,0,0,0.08)] px-5 py-5">
           <div className="flex items-center gap-2 mb-3">
             <span>📍</span>
-            <h2 className="text-base font-bold text-cugini-dark">Dónde estamos</h2>
+            <h2 className="text-base font-bold text-cugini-dark">
+              Dónde estamos
+            </h2>
           </div>
 
           <div className="rounded-lg border border-slate-200 p-3 text-sm">
-            <p className="text-cugini-dark/90">Exequiel Larenas 547,Coelemu, Ñuble</p>
+            <p className="text-cugini-dark/90">
+              Exequiel Larenas 547, Coelemu, Ñuble
+            </p>
             <a
               href="https://maps.app.goo.gl/aBtLezprD2BF9M1D9"
               target="_blank"
@@ -181,7 +204,9 @@ export default function ClaimPage() {
         <div className="rounded-2xl bg-white/95 backdrop-blur shadow-[0_6px_30px_rgba(0,0,0,0.08)] px-5 pt-5 pb-7">
           <div className="flex items-center gap-2 mb-3">
             <span>📖</span>
-            <h2 className="text-base font-bold text-cugini-dark">Nuestra carta</h2>
+            <h2 className="text-base font-bold text-cugini-dark">
+              Nuestra carta
+            </h2>
           </div>
 
           <div className="rounded-lg border border-slate-200 overflow-hidden">
@@ -201,10 +226,3 @@ export default function ClaimPage() {
     </div>
   )
 }
-{/* Animaciones locales para micro-interacciones */}
-<style jsx>{`
-  @keyframes cgiShake { ... }
-  .cgi-shake { ... }
-  @keyframes cgiBreathe { ... }
-  .cgi-breathe { ... }
-`}</style>
