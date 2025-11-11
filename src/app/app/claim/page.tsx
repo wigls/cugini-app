@@ -201,3 +201,10 @@ export default function ClaimPage() {
     </div>
   )
 }
+{/* Animaciones locales para micro-interacciones */}
+<style jsx>{`
+  @keyframes cgiShake { ... }
+  .cgi-shake { ... }
+  @keyframes cgiBreathe { ... }
+  .cgi-breathe { ... }
+`}</style>

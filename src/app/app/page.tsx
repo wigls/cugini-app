@@ -473,7 +473,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Card del horno */}
-          <div className="mt-2 flex justify-center">
+          <div className="relative z-10 w-full space-y-10 sm:space-y-12 lg:space-y-14">
             <div className="w-full max-w-md">
               <PointsOvenCard
                 email={email ?? ''}
@@ -539,7 +539,7 @@ export default function DashboardPage() {
 
 
         {/* Últimos movimientos (visual cálido y diferenciado) */}
-        <div className="rounded-3xl shadow-lg shadow-amber-900/10 bg-white/55 backdrop-blur-sm ring-1 ring-black/5">
+        <div className="rounded-3xl shadow-md shadow-amber-900/10 bg-[#fffaf4]/90 backdrop-blur ring-1 ring-black/5 border border-white/40">
           <div className="px-5 pt-5 pb-3">
             <h2 className="text-lg font-semibold text-cugini-dark">Últimos movimientos</h2>
           </div>
@@ -603,54 +603,84 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* === Avisos de Cugini === */}
-        <div className="rounded-3xl shadow-lg shadow-amber-900/10 bg-white/55 backdrop-blur-sm ring-1 ring-black/5 mt-6">
-          <div className="px-5 pt-5 pb-3 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-cugini-dark">Avisos de Cugini</h2>
-          </div>
+{/* === Avisos de Cugini === */}
+<div className="relative mt-5 sm:mt-14 lg:mt-16 rounded-3xl shadow-md shadow-amber-900/10 bg-[#fff4ea]/90 backdrop-blur ring-1 ring-black/5 border border-white/40">
 
-          <div className="px-5 pb-5">
-            {annLoading ? (
-              <p className="text-sm text-cugini-dark/50">Cargando avisos…</p>
-            ) : annErr ? (
-              <p className="text-sm text-cugini-red">No fue posible cargar los avisos.</p>
-            ) : ann.length === 0 ? (
-              <p className="text-sm text-cugini-dark/50">No hay avisos por ahora 🙂</p>
-            ) : (
-              <ul className="space-y-3">
-                {ann.map(a => (
-                  <li
-                    key={a.id}
-                    className="rounded-2xl px-3 py-2 ring-1 ring-black/5 bg-white/70 backdrop-blur-sm"
-                  >
-                    <p className="text-sm font-semibold text-cugini-dark">
+  {/* cintas */}
+  <div aria-hidden className="pointer-events-none absolute -top-2 left-6 rotate-[-8deg] z-20 cugi-tape" />
+  <div aria-hidden className="pointer-events-none absolute -top-1 right-8 rotate-[7deg] z-20 cugi-tape" />
+
+  {/* contenedor base */}
+  <div className="rounded-3xl shadow-xl shadow-amber-900/15 ring-1 ring-black/5 relative overflow-hidden bg-gradient-to-br from-[#FFF4E0] via-[#FFF8ED] to-[#FFEBC2]">
+    {/* franja superior */}
+    <div className="absolute top-0 left-0 right-0 h-[6px] bg-gradient-to-r from-cugini-red via-yellow-400 to-cugini-green opacity-80 z-10" />
+
+    {/* papel: forzamos color + z-index y evitamos que la máscara tape el contenido */}
+    <div className="cigi-paper-wrapper relative z-10">
+      <div className="cugi-paper rounded-3xl relative z-10 text-cugini-dark">
+        {/* Encabezado */}
+        <div className="px-6 pt-6 pb-3 flex items-center justify-between relative z-10">
+          <h2 className="text-2xl font-extrabold tracking-wide text-cugini-red flex items-center gap-2">
+            <span className="text-3xl">📢</span> ¡Avisos de Cugini!
+          </h2>
+        </div>
+
+        {/* Debug (quítalo luego): muestra estado de carga */}
+        <div className="px-6 text-[11px] text-cugini-dark/50 select-none">
+        </div>
+
+        {/* Lista / vacíos */}
+        <div className="px-6 pb-6 relative z-10">
+          {annLoading ? (
+            <p className="text-sm text-cugini-dark/60 italic">Cargando avisos…</p>
+          ) : annErr ? (
+            <p className="text-sm text-cugini-red font-semibold">No fue posible cargar los avisos.</p>
+          ) : ann.length === 0 ? (
+            <p className="text-sm text-cugini-dark/60">No hay avisos por ahora 🙂</p>
+          ) : (
+            <ul className="space-y-4 cugi-fade-in">
+              {ann.map((a, idx) => (
+                <li
+                  key={a.id}
+                  className="relative rounded-2xl px-4 py-3 ring-1 ring-amber-900/10 bg-white/80 backdrop-blur-sm shadow-md hover:shadow-lg hover:-translate-y-[2px] transition-all duration-300 focus-within:ring-2 focus-within:ring-amber-400/50 cugi-item-in"
+                  style={{ animationDelay: `${idx * 80}ms` }}
+                >
+                  <span className="absolute -top-2 left-4 text-lg select-none cugi-pin">📌</span>
+                  <div className="pl-6">
+                    <p className="text-base font-semibold text-cugini-dark">
                       {a.title || 'Aviso'}
                     </p>
-                    <p className="text-sm text-cugini-dark/80 whitespace-pre-wrap">
+                    <p className="text-sm text-cugini-dark/80 whitespace-pre-wrap mt-1">
                       {a.message}
-                      {a.link_url ? (
-                        <>
-                          {' '}
-                          <a
-                            href={a.link_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="underline text-cugini-green hover:opacity-90"
-                          >
-                            Ver más
-                          </a>
-                        </>
-                      ) : null}
                     </p>
-                    <p className="text-[11px] text-cugini-dark/50 mt-1">
+                    {a.link_url && (
+                      <a
+                        href={a.link_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-block mt-2 text-xs font-bold uppercase tracking-wide text-cugini-green hover:text-cugini-red transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-amber-400/50 rounded"
+                      >
+                        🍕 Ver más
+                      </a>
+                    )}
+                    <p className="text-[11px] text-cugini-dark/50 mt-2">
                       {new Date(a.created_at).toLocaleString()}
                     </p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
+      </div>
+    </div>
+
+    {/* sombra inferior */}
+    <div className="absolute bottom-0 left-0 right-0 h-[16px] bg-gradient-to-t from-amber-900/10 to-transparent pointer-events-none" />
+  </div>
+</div>
+
+
       </div>
 
       {/* Modal de niveles (restaurado) */}
@@ -764,7 +794,9 @@ export default function DashboardPage() {
     </div>
   </div>
 )}
-
+<div className="relative mt-6 border border-red-400">
+  {/* …resto del bloque… */}
+</div>
 
       {/* Scrollbar sutil + body transparente */}
       <style jsx global>{`
