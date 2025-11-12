@@ -93,9 +93,10 @@ export default function ClaimPage() {
       <div className="max-w-2xl mx-auto space-y-7">
 
         {/* ===== Tarjeta: Reclamar código ===== */}
-        <div className="rounded-2xl bg-white/80 backdrop-blur-lg shadow-[0_6px_25px_rgba(255,125,50,0.15)] 
-                        overflow-hidden border border-[#F8D9A0]/50 
-                        transition hover:shadow-[0_8px_32px_rgba(255,125,50,0.25)] duration-300">
+        <div className="relative rounded-[1.2rem] overflow-hidden 
+                bg-gradient-to-br from-[#FFF8ED] via-[#FFF3E0] to-[#FFE5C2] 
+                border border-[#F7D6A4]/70 shadow-[0_8px_25px_rgba(255,150,60,0.15)] 
+                backdrop-blur-[3px]">
           <div className="px-5 pt-5 pb-3">
             <div className="flex items-center gap-3">
               <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#FFE7B8] text-[#D9480F]">
@@ -159,8 +160,9 @@ export default function ClaimPage() {
         </div>
 
         {/* ===== Tarjeta: Horario ===== */}
-        <div className="rounded-2xl bg-white/80 backdrop-blur-lg shadow-[0_6px_25px_rgba(255,125,50,0.15)] 
-                        px-5 py-5 border border-[#F8D9A0]/50">
+        <div className="rounded-[1.2rem] bg-gradient-to-br from-[#FFF1DB] via-[#FFE4BE] to-[#FFDFA6] 
+             shadow-[0_6px_20px_rgba(255,140,60,0.15)] border border-[#F6C987]/70 
+             px-5 py-5 overflow-hidden">
           <div className="flex items-center gap-2 mb-3">
             <span>⏰</span>
             <h2 className="text-base font-bold text-cugini-dark drop-shadow-sm">
@@ -192,17 +194,20 @@ export default function ClaimPage() {
   </div>
 </div>
 
-
         {/* ===== Tarjeta: Dirección ===== */}
-        {/* ===== Tarjeta: Dirección ===== */}
-<div className="relative rounded-2xl bg-white/80 backdrop-blur-lg shadow-[0_6px_25px_rgba(255,125,50,0.15)] 
-                px-5 py-5 border border-[#F8D9A0]/50 overflow-hidden">
-
-  {/* Ícono animado en la esquina superior derecha */}
+<div
+  className="relative rounded-[1.2rem] overflow-hidden
+             bg-gradient-to-br from-[#FFF1DB] via-[#FFE4BE] to-[#FFDFA6]
+             border border-[#F6C987]/70 shadow-[0_6px_20px_rgba(255,140,60,0.15)]
+             px-5 py-5"
+>
+  {/* Lottie en esquina (padre es relative) */}
   <SteamLottie
     src="/animations/Travel Icons - Map.lottie"
     size={80}
-    className="absolute right-[6] top-[-11] opacity-90 pointer-events-none"
+    className="absolute right-2 top-0 z-20 pointer-events-none"
+    // Si quieres microajustar píxel a píxel, usa 'style':
+    // style={{ right: '6px', top: '-11px' }}
   />
 
   <div className="flex items-center gap-2 mb-3 relative z-10">
@@ -212,7 +217,8 @@ export default function ClaimPage() {
     </h2>
   </div>
 
-  <div className="rounded-lg border border-[#F8D9A0]/50 p-3 text-sm bg-white/70 backdrop-blur relative z-10">
+  <div className="rounded-lg border border-[#F8D9A0]/50 p-3 text-sm
+                  bg-white/70 backdrop-blur relative z-10">
     <p className="text-cugini-dark/90">
       Exequiel Larenas 547, Coelemu, Ñuble
     </p>
@@ -227,9 +233,12 @@ export default function ClaimPage() {
 </div>
 
 
+
         {/* ===== Tarjeta: Carta ===== */}
-        <div className="rounded-2xl bg-white/80 backdrop-blur-lg shadow-[0_6px_25px_rgba(255,125,50,0.15)] 
-                        px-5 pt-5 pb-7 border border-[#F8D9A0]/50">
+        <div className="rounded-[1.2rem] bg-gradient-to-br from-[#FFF8ED] via-[#FFF3E0] to-[#FFE5C2] 
+             shadow-[0_8px_24px_rgba(255,140,60,0.15)] border border-[#F9D7A5]/70 
+             backdrop-blur-[3px] transition hover:shadow-[0_10px_32px_rgba(255,140,60,0.25)] 
+             px-5 py-5 overflow-hidden">
           <div className="flex items-center gap-2 mb-3">
             <span>📖</span>
             <h2 className="text-base font-bold text-cugini-dark drop-shadow-sm">
